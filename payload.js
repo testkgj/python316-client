@@ -1,4 +1,4 @@
-﻿(()=>{ 
+(()=>{ 
 "use strict";
 if(window.__python316_native)return;
 window.__python316_native=true;
