@@ -18,9 +18,11 @@ renderer through the Chrome DevTools Protocol (CDP).
 - Launches Discord with `--remote-debugging-port` (relaunches once only if needed), then
   watches forever with exponential backoff.
 - `doctor.ps1` full health report, `install.ps1 -Status / -Repair / -Uninstall`.
-- Client UI: RPC rotation, profile tools, game/stream forge with progress + cancel, ghost
-  mode, logs, toasts, command palette (`Ctrl+Shift+K`), `Ctrl+Shift+P` toggle, `Esc` to tray,
-  update badge.
+- Client UI (Vencord-style): native sidebar launcher, **Settings** tab with interface toggles
+  and per-module on/off (persisted via cookie store), About/changelog with auto metadata from
+  the loader, Check-for-updates, RPC rotation, profile tools, game/stream forge with
+  progress + cancel, ghost mode, logs, toasts, command palette (`Ctrl+Shift+K`),
+  `Ctrl+Shift+P` toggle, `Esc` to tray, Reload client.
 - Automated test suite + CI (`tests/run-tests.ps1`).
 
 ## How it works
