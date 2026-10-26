@@ -1,0 +1,35 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Node syntax
+        run: node --check main.js
+
+      - name: PowerShell parse
+        shell: pwsh
+        run: |
+          $files = @('injector.ps1','install.ps1','uninstall.ps1','deploy.ps1','doctor.ps1')
+          foreach ($f in $files) {
+            if (-not (Test-Path $f)) { throw "missing $f" }
+            [void][scriptblock]::Create((Get-Content $f -Raw))
+            Write-Host "OK $f"
+          }
+
+      - name: JSON valid
+        shell: pwsh
+        run: |
+          Get-Content config.json -Raw | ConvertFrom-Json | Out-Null
+          Get-Content version.json -Raw | ConvertFrom-Json | Out-Null
+          Write-Host 'JSON OK'

