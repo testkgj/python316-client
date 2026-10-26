@@ -17,7 +17,7 @@
     try { document.getElementById('py316-host')?.remove(); } catch {}
 
     // ==================== CONFIG ====================
-    const __version = '4.4.1';
+    const __version = '4.4.2';
     let __hb = null;
     const CFG = {
         brand: { name: 'Python3.16 Client', author: 'Python 3.16', version: __version },
@@ -285,66 +285,47 @@
     const setGhostMode = (on) => setStatus(on ? 'invisible' : 'online');
 
     // ==================== MARK ALL READ ====================
-    const markAllRead = () => {
+    const markAllRead = async () => {
         try {
-            const wp = getWebpack();
+            const c = await ensureContext();
+            const rest = c.rest;
             const ids = new Set();
-            let flux = null;
 
-            const visit = (t) => {
-                if (!t || (typeof t !== 'object' && typeof t !== 'function')) return;
-                try {
-                    if (!flux && typeof t.dispatch === 'function' && typeof t.subscribe === 'function') flux = t;
-                } catch {}
-                try {
-                    if (typeof t.getChannels === 'function') {
-                        const ch = t.getChannels();
-                        if (ch && typeof ch === 'object') {
-                            for (const k of Object.keys(ch)) {
-                                const v = ch[k];
-                                if (v && typeof v.id === 'string' && 'type' in v) ids.add(v.id);
-                            }
-                        }
-                    }
-                } catch {}
-                try {
-                    if (typeof t.getSortedChannels === 'function') {
-                        const sc = t.getSortedChannels();
-                        if (Array.isArray(sc)) {
-                            for (const it of sc) {
-                                const v = it && (it.channel || it);
-                                if (v && typeof v.id === 'string') ids.add(v.id);
-                            }
-                        } else if (sc && typeof sc === 'object') {
-                            for (const k of Object.keys(sc)) {
-                                const v = sc[k];
-                                if (v && typeof v.id === 'string') ids.add(v.id);
-                            }
-                        }
-                    }
-                } catch {}
-            };
+            let guilds = [];
+            try { const g = await rest.get({ url: '/users/@me/guilds' }); guilds = g?.body || g || []; } catch {}
+            if (!Array.isArray(guilds)) guilds = Object.values(guilds || {});
 
-            const scan = (t) => {
-                visit(t);
-                try { visit(t && t.default); } catch {}
-                try { for (const k in t) visit(t[k]); } catch {}
-            };
-
-            // modules known to host channel stores
-            for (const [id, fn] of Object.entries(wp.m || {})) {
-                let src = '';
-                try { src = fn.toString(); } catch { continue; }
-                if (src.indexOf('getDMFromUserId') === -1 && src.indexOf('getChannels') === -1) continue;
-                try { scan(wp(id)); } catch {}
+            for (const g of guilds.slice(0, 300)) {
+                if (!g || !g.id) continue;
+                try {
+                    const ch = await rest.get({ url: `/guilds/${g.id}/channels` });
+                    const arr = ch?.body || ch || [];
+                    for (const x of (Array.isArray(arr) ? arr : Object.values(arr))) if (x && x.id) ids.add(String(x.id));
+                } catch {}
+                await sleep(40);
             }
-            // cached exports too
+
+            try {
+                const dm = await rest.get({ url: '/users/@me/channels' });
+                const arr = dm?.body || dm || [];
+                for (const x of (Array.isArray(arr) ? arr : Object.values(arr))) if (x && x.id) ids.add(String(x.id));
+            } catch {}
+
+            if (!ids.size) { log('Mark all read: no channels found', 'warn'); return false; }
+
+            const wp = getWebpack();
+            let flux = null;
             for (const mod of Object.values(wp.c)) {
                 if (!mod?.exports) continue;
-                scan(mod.exports);
+                const cands = [mod.exports, mod.exports.default];
+                try { for (const k in mod.exports) cands.push(mod.exports[k]); } catch {}
+                for (const t of cands) {
+                    try {
+                        if (t && typeof t.dispatch === 'function' && typeof t.subscribe === 'function' && (t._subscriptions || typeof t.register === 'function')) { flux = t; break; }
+                    } catch {}
+                }
+                if (flux) break;
             }
-
-            if (ids.size === 0) { log('Mark all read: no channels found', 'warn'); return false; }
             if (!flux) { log('Mark all read: dispatcher not found', 'warn'); return false; }
 
             flux.dispatch({ type: 'BULK_ACK_CHANNELS', channels: Array.from(ids) });
@@ -1201,7 +1182,7 @@
             if (setStatus(b.dataset.s)) log(`Status → ${b.dataset.s}`, 'success');
             else log('Gateway error', 'error');
         }));
-        $('#py-read').addEventListener('click', () => { if (!markAllRead()) log('Module not found', 'error'); });
+        $('#py-read').addEventListener('click', () => { markAllRead(); });
         $('#py-reset').addEventListener('click', () => {
             if (confirm('Force logout + new token?')) {
                 try { localStorage.removeItem('token'); location.reload(); } catch (e) { log(e.message, 'error'); }

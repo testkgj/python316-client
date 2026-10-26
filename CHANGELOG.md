@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.2
+- Mark-All-Read rewritten: enumerates channels via REST (`/users/@me/guilds`,
+  `/guilds/{id}/channels`, `/users/@me/channels`) then dispatches `BULK_ACK_CHANNELS`.
+- Clear success/warn logs with channel counts.
+
 ## 4.4.1 (loader 2.1.1)
 - Fixed CDP target selection: never target the Discord Overlay (`/popout`); prefer
   `/channels/` then `/app`. This was causing flaky/absent injection.
