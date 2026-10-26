@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [int]$Port,
-    [string]$Root = $PSScriptRoot,
+    [string]$Root,
     [string]$MainUrl,
     [string]$MainPath,
     [switch]$Once,
@@ -12,6 +12,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# NOTE: $PSScriptRoot is empty inside param defaults when launched with -File,
+# so resolve it in the body instead.
+if (-not $Root) {
+    $Root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+}
 
 # ---------------------------------------------------------------- state / log
 $StateDir = Join-Path $env:LOCALAPPDATA 'Python316'
