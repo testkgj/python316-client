@@ -39,6 +39,22 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host 'Nothing to commit.' -ForegroundColor Yellow
 }
 
+# Pin version.json to the exact commit so raw.githubusercontent.com CDN caching
+# can never serve an older payload than the version it advertises.
+$codeSha = (git rev-parse HEAD).Trim()
+if (Test-Path 'version.json') {
+    $v = Get-Content 'version.json' -Raw | ConvertFrom-Json
+    $pinned = "https://raw.githubusercontent.com/$full/$codeSha/main.js"
+    if ($v.url -ne $pinned) {
+        $v.url = $pinned
+        ($v | ConvertTo-Json) | Set-Content 'version.json' -Encoding UTF8
+        git add 'version.json'
+        git commit -m ("release: pin payload to {0}" -f $codeSha.Substring(0, 7)) | Out-Null
+        $codeSha = (git rev-parse HEAD).Trim()
+        Write-Host "Pinned payload to $($pinned)" -ForegroundColor DarkGray
+    }
+}
+
 git branch -M $Branch
 git push -u origin $Branch
 if ($LASTEXITCODE -ne 0) { throw 'git push failed' }

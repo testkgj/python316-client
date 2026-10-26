@@ -221,10 +221,16 @@ function Get-RemotePayload {
         $fUrl = '{0}{1}t={2}' -f $url, $sep, [DateTime]::UtcNow.Ticks
         $code = (Invoke-WebRequest -Uri $fUrl -UseBasicParsing -TimeoutSec 20).Content
         if (-not (Test-PayloadCode -Code $code)) { throw 'payload failed validation' }
-        if ($version -and $code -match '__version\s*=\s*[''"]([^''"]+)[''"]') {
-            $codeVer = $Matches[1]
-            if ($codeVer -ne $version) { Write-Log "version.json=$version but payload=$codeVer" 'WARN' }
-            $version = $codeVer
+        if ($version) {
+            if ($code -match '__version\s*=\s*[''"]([^''"]+)[''"]') {
+                $codeVer = $Matches[1]
+                if ($codeVer -ne $version) {
+                    throw "payload version mismatch (declared=$version got=$codeVer, stale CDN?)"
+                }
+                $version = $codeVer
+            } else {
+                throw "payload missing version marker (declared=$version, stale CDN?)"
+            }
         }
         Save-PayloadCache -Code $code
         return [pscustomobject]@{ Code = $code; Version = $version; Url = $url }
