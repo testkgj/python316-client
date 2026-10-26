@@ -1,5 +1,5 @@
-﻿{
+{
     "version":  "4.3.0",
-    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/70912f64a02b1d9377fb6de681dbd7f7b02663fa/main.js",
+    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/b55fb694f29317f0e0daca4be90a5934037245a5/main.js",
     "changelog":  "doctor + self-repair, versioned hot updates, validation + backoff, UI hotkey toasts update badge"
 }
