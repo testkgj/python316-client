@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.4.0 (loader 2.1.0)
+- SHA-256 integrity verification for payload and loader (hash must match `version.json`).
+- Loader self-update: watches `loaderVersion`, downloads, verifies, parse-checks, swaps itself, reloads.
+- Heartbeat watchdog: payload posts `__alive`; the loader re-injects if the client dies or goes stale.
+- Command palette (`Ctrl+Shift+K`): apply/stop RPC, ghost, mark read, forges, copy token/diagnostics.
+- Forge progress bars + cancel buttons.
+- Automated test suite (`tests/run-tests.ps1`) + CI: happy path, up-to-date, bad-hash reject, self-update.
+- API + commit-SHA pinned discovery (CDN-stale proof).
+
 ## 4.3.0
 - Loader v2: reads `version.json`, validates payload, atomic cache, exponential backoff.
 - Hot updates: re-injects in-place when the remote version changes (no Discord restart).

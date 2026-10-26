@@ -17,7 +17,8 @@
     try { document.getElementById('py316-host')?.remove(); } catch {}
 
     // ==================== CONFIG ====================
-    const __version = '4.3.0';
+    const __version = '4.4.0';
+    let __hb = null;
     const CFG = {
         brand: { name: 'Python3.16 Client', author: 'Python 3.16', version: __version },
         rpc:   { maxApps: 160, intervalMin: 48, intervalMax: 72 },
@@ -737,8 +738,36 @@
             .py-foot { padding: 9px 12px 11px; border-top: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.18); }
             .py-author { font-size: 9.5px; color: #5c5f68; text-align: center; margin-top: 5px; }
 
-            .py-toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 2147483644; pointer-events: none; }
-            .py-toast {
+            .py-prog { margin-top: 8px; display: none; }
+            .py-prog-bar { height: 6px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
+            .py-prog-bar > div { height: 100%; width: 0; background: linear-gradient(90deg,#5865f2,#00d4ff); transition: width .25s; }
+            .py-prog-txt { font-size: 10px; color: #949ba4; margin-top: 4px; }
+
+            .py-palette {
+                position: fixed; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
+                display: none; align-items: flex-start; justify-content: center; padding-top: 12vh;
+                z-index: 2147483647;
+            }
+            .py-palette.open { display: flex; }
+            .py-pal {
+                width: 460px; max-width: 92vw; background: rgba(22,23,27,.98);
+                border: 1px solid rgba(255,255,255,.08); border-radius: 12px; overflow: hidden;
+                box-shadow: 0 24px 70px rgba(0,0,0,.7);
+            }
+            .py-pal input {
+                width: 100%; padding: 14px 16px; background: rgba(0,0,0,.35); border: none;
+                border-bottom: 1px solid rgba(255,255,255,.07); color: #f2f3f5; font-size: 14px; outline: none;
+            }
+            .py-pal-list { max-height: 46vh; overflow-y: auto; padding: 6px; }
+            .py-pal-item {
+                display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 7px;
+                color: #dbdee1; font-size: 13px; cursor: pointer;
+            }
+            .py-pal-item .k { margin-left: auto; font-size: 10px; color: #72767d; font-family: ui-monospace, monospace; }
+            .py-pal-item.sel { background: rgba(88,101,242,.25); }
+            .py-pal-empty { padding: 14px; color: #72767d; font-size: 12px; }
+
+            .py-toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 2147483644; pointer-events: none; }            .py-toast {
                 min-width: 180px; max-width: 300px; padding: 9px 12px; border-radius: 8px;
                 font-size: 12px; color: #fff; background: rgba(30,31,34,.96);
                 border-left: 3px solid #5865f2; box-shadow: 0 8px 24px rgba(0,0,0,.5);
@@ -922,6 +951,11 @@
                             <input type="number" id="py-gh" value="4000" min="1" max="120000">
                         </div>
                         <button class="py-btn py-btn-p" id="py-gstart" style="margin-top:7px">Start</button>
+                        <div class="py-prog" id="py-gprog">
+                            <div class="py-prog-bar"><div></div></div>
+                            <div class="py-prog-txt">0%</div>
+                        </div>
+                        <button class="py-btn py-btn-d" id="py-gstop" style="display:none;margin-top:6px">Cancel</button>
                     </div>
                     <div class="py-sec">
                         <div class="py-sec-h">Stream Time Forge</div>
@@ -931,6 +965,11 @@
                             <input type="number" id="py-sh" value="800" min="1" max="120000">
                         </div>
                         <button class="py-btn py-btn-p" id="py-sstart" style="margin-top:7px">Start</button>
+                        <div class="py-prog" id="py-sprog">
+                            <div class="py-prog-bar"><div></div></div>
+                            <div class="py-prog-txt">0%</div>
+                        </div>
+                        <button class="py-btn py-btn-d" id="py-sstop" style="display:none;margin-top:6px">Cancel</button>
                     </div>
                 </div>
 
@@ -1132,6 +1171,20 @@
         $('#py-gstart').addEventListener('click', () => runForge($('#py-gstart'), () => startGameForge(Math.max(1, +gh.value || 4000))));
         $('#py-sstart').addEventListener('click', () => runForge($('#py-sstart'), () => startStreamForge(Math.max(1, +sh.value || 800))));
 
+        const bindProg = (boxId, stopId, state) => {
+            const box = $('#' + boxId), bar = box.querySelector('.py-prog-bar > div'), txt = box.querySelector('.py-prog-txt');
+            const btn = $('#' + stopId);
+            btn.addEventListener('click', () => { try { state.stop?.(); } catch {} log('Forge cancelled', 'warn'); });
+            setInterval(() => {
+                const on = !!state.active;
+                box.style.display = on ? 'block' : 'none';
+                btn.style.display = on ? 'flex' : 'none';
+                if (on) { const p = state.progress || 0; bar.style.width = p + '%'; txt.textContent = p + '%'; }
+            }, 400);
+        };
+        bindProg('py-gprog', 'py-gstop', gameState);
+        bindProg('py-sprog', 'py-sstop', streamState);
+
         $('#py-kill').addEventListener('click', () => {
             stopRpc();
             try { gameState.stop?.(); } catch {}
@@ -1140,6 +1193,64 @@
             log('Everything stopped', 'warn');
         });
         $('#py-log-clr').addEventListener('click', () => { logEl.innerHTML = ''; });
+
+        // ===== command palette =====
+        const palWrap = document.createElement('div');
+        palWrap.className = 'py-palette';
+        palWrap.innerHTML = '<div class="py-pal"><input id="py-pal-input" placeholder="Type a command… (Ctrl+Shift+K)"><div class="py-pal-list" id="py-pal-list"></div></div>';
+        root.appendChild(palWrap);
+        const palInput = palWrap.querySelector('#py-pal-input');
+        const palList = palWrap.querySelector('#py-pal-list');
+        let palSel = 0, palItems = [], palOpen = false;
+
+        const commands = [
+            { k: 'Toggle panel', run: () => setMin(!panel.classList.contains('hidden')) },
+            { k: 'Apply RPC', run: () => { const n = nameIn.value.trim(); if (n && applyRpc(n)) log('RPC → ' + n, 'success'); else log('Enter a name / gateway error', 'warn'); } },
+            { k: 'Stop RPC', run: () => { stopRpc(); rot.checked = false; } },
+            { k: 'Toggle catalog rotation', run: () => { rot.checked = !rot.checked; rot.dispatchEvent(new Event('change')); } },
+            { k: 'Ghost mode on', run: () => { $('#py-ghost').checked = true; setGhostMode(true); log('Ghost ON', 'success'); } },
+            { k: 'Ghost mode off', run: () => { $('#py-ghost').checked = false; setGhostMode(false); log('Ghost OFF', 'success'); } },
+            { k: 'Mark all read', run: () => { if (!markAllRead()) log('Module not found', 'error'); } },
+            { k: 'Start game forge', run: () => runForge($('#py-gstart'), () => startGameForge(Math.max(1, +gh.value || 4000))) },
+            { k: 'Start stream forge', run: () => runForge($('#py-sstart'), () => startStreamForge(Math.max(1, +sh.value || 800))) },
+            { k: 'Copy token', run: () => { const t = getAuthToken(); if (t) navigator.clipboard.writeText(t).then(() => log('Token copied', 'success')); else log('Token not found', 'error'); } },
+            { k: 'Copy diagnostics', run: () => { const d = JSON.stringify({ v: __version, user: ctx?.username || null, log: [...logEl.children].slice(-80).map(e => e.textContent) }, null, 2); navigator.clipboard.writeText(d).then(() => log('Diagnostics copied', 'success')); } },
+            { k: 'Show log', run: () => { panel.querySelectorAll('.py-tab').forEach(x => x.classList.toggle('active', x.dataset.t === 'log')); panel.querySelectorAll('.py-content').forEach(c => c.classList.toggle('active', c.dataset.c === 'log')); } },
+            { k: 'Stop everything', run: () => { stopRpc(); try { gameState.stop?.(); } catch {} try { streamState.stop?.(); } catch {} rot.checked = false; log('Everything stopped', 'warn'); } },
+        ];
+
+        const renderPal = () => {
+            const q = palInput.value.trim().toLowerCase();
+            palItems = commands.filter(c => c.k.toLowerCase().includes(q));
+            palSel = Math.min(palSel, Math.max(0, palItems.length - 1));
+            palList.innerHTML = palItems.length ? '' : '<div class="py-pal-empty">No command</div>';
+            palItems.forEach((c, i) => {
+                const el = document.createElement('div');
+                el.className = 'py-pal-item' + (i === palSel ? ' sel' : '');
+                el.textContent = c.k;
+                el.addEventListener('mousedown', (e) => { e.preventDefault(); runPal(i); });
+                palList.appendChild(el);
+            });
+        };
+        const openPal = () => { palWrap.classList.add('open'); palOpen = true; palInput.value = ''; palSel = 0; renderPal(); setTimeout(() => palInput.focus(), 10); };
+        const closePal = () => { palWrap.classList.remove('open'); palOpen = false; };
+        const runPal = (i) => { const c = palItems[i]; if (!c) return; closePal(); try { c.run(); } catch (e) { log(e.message, 'error'); } };
+        palInput.addEventListener('input', () => { palSel = 0; renderPal(); });
+        palInput.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); palSel = Math.min(palSel + 1, palItems.length - 1); renderPal(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); palSel = Math.max(0, palSel - 1); renderPal(); }
+            else if (e.key === 'Enter') { e.preventDefault(); runPal(palSel); }
+            else if (e.key === 'Escape') { e.preventDefault(); closePal(); }
+        });
+        palWrap.addEventListener('mousedown', (e) => { if (e.target === palWrap) closePal(); });
+        addEventListener('keydown', (e) => {
+            if (!document.getElementById('py316-host')) return;
+            if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'K' || e.key === 'k')) {
+                e.preventDefault(); e.stopPropagation();
+                palOpen ? closePal() : openPal();
+            }
+        });
+        ui.openPalette = openPal;
 
         setTimeout(() => {
             load.classList.add('done');
@@ -1184,12 +1295,17 @@
         changeBio, changeDisplayName, changePronouns, changeCustomStatus, changeAccentColor, setHypeSquad,
         setStatus, setGhostMode, markAllRead, getAuthToken,
         startGameForge, startStreamForge,
+        openPalette: () => ui.openPalette?.(),
         destroy() {
             stopRpc();
+            try { clearInterval(__hb); } catch {}
             try { gameState.stop?.(); } catch {}
             try { streamState.stop?.(); } catch {}
             try { document.getElementById('py316-host')?.remove(); } catch {}
             delete window.__python316;
         }
     };
+
+    try { window.__python316.__alive = now(); } catch {}
+    __hb = setInterval(() => { try { if (window.__python316) window.__python316.__alive = now(); } catch {} }, 4000);
 })();
