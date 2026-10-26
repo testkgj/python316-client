@@ -1,9 +1,9 @@
 {
-    "version":  "4.4.2",
-    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/194aceb0663f92a656527321e67c4e2cb7db2dfe/main.js",
-    "sha256":  "04dc64918d7220cd418bc1de8276523b56d4e2d4d584d36acf24c642b9a36902",
-    "loaderVersion":  "2.1.1",
-    "loaderUrl":  "https://raw.githubusercontent.com/testkgj/python316-client/194aceb0663f92a656527321e67c4e2cb7db2dfe/injector.ps1",
-    "loaderSha256":  "63adffcc7b5541ba8d2c0f7a471deb5c6c2aa28872f03244765115f9b93e1e9e",
-    "changelog":  "Mark-All-Read via REST channel enumeration + Flux dispatch; target-selection fix; self-test"
+  "version": "4.5.0",
+  "url": "https://raw.githubusercontent.com/testkgj/python316-client/main/main.js",
+  "sha256": "",
+  "loaderVersion": "2.1.1",
+  "loaderUrl": "https://raw.githubusercontent.com/testkgj/python316-client/main/injector.ps1",
+  "loaderSha256": "",
+  "changelog": "Vencord-style: sidebar launcher, Settings tab with module toggles, About/changelog + update check, persisted settings"
 }

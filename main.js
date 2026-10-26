@@ -17,7 +17,7 @@
     try { document.getElementById('py316-host')?.remove(); } catch {}
 
     // ==================== CONFIG ====================
-    const __version = '4.4.2';
+    const __version = '4.5.0';
     let __hb = null;
     const CFG = {
         brand: { name: 'Python3.16 Client', author: 'Python 3.16', version: __version },
@@ -25,6 +25,25 @@
         game:  { titles: 340, batchSize: 14, delay: 880, wobble: true },
         stream:{ sessions: 48, batchSize: 9, delay: 780, wobble: true }
     };
+
+    // ==================== SETTINGS ====================
+    const SETTINGS_KEY = 'py316-settings';
+    const DEFAULT_SETTINGS = {
+        launcher: true,
+        startMin: false,
+        toasts: true,
+        palette: true,
+        modules: { rpc: true, profile: true, tools: true, forge: true }
+    };
+    let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    try {
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        if (raw) {
+            const s = JSON.parse(raw);
+            settings = Object.assign(settings, s, { modules: Object.assign({}, DEFAULT_SETTINGS.modules, s.modules || {}) });
+        }
+    } catch {}
+    const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {} };
 
     // ==================== UTILS ====================
     const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -778,6 +797,13 @@
             .py-prog-bar > div { height: 100%; width: 0; background: linear-gradient(90deg,#5865f2,#00d4ff); transition: width .25s; }
             .py-prog-txt { font-size: 10px; color: #949ba4; margin-top: 4px; }
 
+            .py-set-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.04); gap: 10px; }
+            .py-set-row:last-child { border-bottom: none; }
+            .py-set-lbl { font-size: 12px; color: #dbdee1; display: flex; flex-direction: column; gap: 2px; }
+            .py-set-sub { font-size: 10px; color: #72767d; }
+            .py-changelog { margin-top: 8px; font-size: 11px; color: #949ba4; background: rgba(0,0,0,.25); border-radius: 6px; padding: 8px; white-space: pre-wrap; line-height: 1.5; max-height: 140px; overflow-y: auto; }
+            .py-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 6px; background: #3ba55d; box-shadow: 0 0 6px #3ba55d; vertical-align: middle; }
+
             .py-palette {
                 position: fixed; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
                 display: none; align-items: flex-start; justify-content: center; padding-top: 12vh;
@@ -881,6 +907,7 @@
                 <button class="py-tab" data-t="profile">Profile</button>
                 <button class="py-tab" data-t="tools">Tools</button>
                 <button class="py-tab" data-t="forge">Forge</button>
+                <button class="py-tab" data-t="settings">Settings</button>
                 <button class="py-tab" data-t="log">Log</button>
             </div>
             <div class="py-body">
@@ -1008,6 +1035,53 @@
                     </div>
                 </div>
 
+                <div class="py-content" data-c="settings">
+                    <div class="py-sec">
+                        <div class="py-sec-h">Interface</div>
+                        <div class="py-set-row">
+                            <div class="py-set-lbl">Sidebar launcher<span class="py-set-sub">Button in the server bar</span></div>
+                            <label class="py-toggle"><input type="checkbox" id="py-set-launcher"><span class="py-slider"></span></label>
+                        </div>
+                        <div class="py-set-row">
+                            <div class="py-set-lbl">Start minimized<span class="py-set-sub">Open into the floating orb</span></div>
+                            <label class="py-toggle"><input type="checkbox" id="py-set-min"><span class="py-slider"></span></label>
+                        </div>
+                        <div class="py-set-row">
+                            <div class="py-set-lbl">Toasts<span class="py-set-sub">Notifications on actions</span></div>
+                            <label class="py-toggle"><input type="checkbox" id="py-set-toast"><span class="py-slider"></span></label>
+                        </div>
+                        <div class="py-set-row">
+                            <div class="py-set-lbl">Command palette<span class="py-set-sub">Ctrl+Shift+K</span></div>
+                            <label class="py-toggle"><input type="checkbox" id="py-set-palette"><span class="py-slider"></span></label>
+                        </div>
+                    </div>
+                    <div class="py-sec">
+                        <div class="py-sec-h">Modules</div>
+                        <div class="py-set-row">
+                            <div class="py-set-lbl">RPC</div>
+                            <label class="py-toggle"><input type="checkbox" data-mod="rpc"><span class="py-slider"></span></label>
+                        </div>
+                        <div class="py-set-row">
+                            <div class="py-set-lbl">Profile tools</div>
+                            <label class="py-toggle"><input type="checkbox" data-mod="profile"><span class="py-slider"></span></label>
+                        </div>
+                        <div class="py-set-row">
+                            <div class="py-set-lbl">Tools</div>
+                            <label class="py-toggle"><input type="checkbox" data-mod="tools"><span class="py-slider"></span></label>
+                        </div>
+                        <div class="py-set-row">
+                            <div class="py-set-lbl">Forge</div>
+                            <label class="py-toggle"><input type="checkbox" data-mod="forge"><span class="py-slider"></span></label>
+                        </div>
+                    </div>
+                    <div class="py-sec">
+                        <div class="py-sec-h">About</div>
+                        <div class="py-sec-d" id="py-about"></div>
+                        <div class="py-btn-row"><button class="py-btn py-btn-p" id="py-check-upd">Check for updates</button></div>
+                        <div class="py-changelog" id="py-changelog">Loading changelog…</div>
+                    </div>
+                </div>
+
                 <div class="py-content" data-c="log">
                     <div class="py-sec">
                         <div class="py-sec-h"><span>Log</span><button class="py-btn-mini" id="py-log-clr">Clear</button></div>
@@ -1030,6 +1104,7 @@
         toasts.className = 'py-toasts';
         root.appendChild(toasts);
         uiToast = (text, kind) => {
+            if (!settings.toasts) return;
             const el = document.createElement('div');
             el.className = 'py-toast' + (kind ? ' ' + kind : '');
             el.textContent = text;
@@ -1295,6 +1370,7 @@
         addEventListener('keydown', (e) => {
             if (!document.getElementById('py316-host')) return;
             if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'K' || e.key === 'k')) {
+                if (!settings.palette && !palOpen) return;
                 e.preventDefault(); e.stopPropagation();
                 palOpen ? closePal() : openPal();
             }
@@ -1302,9 +1378,93 @@
         ui.openPalette = openPal;
         ui.selfTest = runSelfTest;
 
+        // ===== settings / modules / launcher / about =====
+        const setCheck = (id, val) => { const el = $('#' + id); if (el) el.checked = !!val; };
+        setCheck('py-set-launcher', settings.launcher);
+        setCheck('py-set-min', settings.startMin);
+        setCheck('py-set-toast', settings.toasts);
+        setCheck('py-set-palette', settings.palette);
+        panel.querySelectorAll('[data-mod]').forEach(cb => { cb.checked = settings.modules[cb.dataset.mod] !== false; });
+
+        const activateTab = (key) => {
+            panel.querySelectorAll('.py-tab').forEach(x => x.classList.toggle('active', x.dataset.t === key));
+            panel.querySelectorAll('.py-content').forEach(c => c.classList.toggle('active', c.dataset.c === key));
+        };
+
+        const applyModules = () => {
+            const mods = ['rpc', 'profile', 'tools', 'forge'];
+            panel.querySelectorAll('.py-tab').forEach(tab => {
+                if (mods.includes(tab.dataset.t)) tab.style.display = settings.modules[tab.dataset.t] === false ? 'none' : '';
+            });
+            const active = panel.querySelector('.py-tab.active');
+            if (active && mods.includes(active.dataset.t) && settings.modules[active.dataset.t] === false) {
+                const firstOn = mods.find(k => settings.modules[k] !== false) || 'settings';
+                activateTab(firstOn);
+            }
+        };
+
+        const applyLauncher = () => {
+            const nav = document.querySelector('nav[class*="guilds"]');
+            const existing = document.getElementById('py316-launcher');
+            if (!settings.launcher) { if (existing) existing.remove(); return; }
+            if (!nav) return;
+            if (existing) { if (existing.parentElement !== nav) nav.insertBefore(existing, nav.firstChild); return; }
+            const btn = document.createElement('div');
+            btn.id = 'py316-launcher';
+            btn.title = 'Python3.16';
+            btn.textContent = '3.16';
+            btn.addEventListener('click', () => setMin(false));
+            nav.insertBefore(btn, nav.firstChild);
+        };
+
+        try {
+            if (!document.getElementById('py316-launcher-style')) {
+                const ls = document.createElement('style');
+                ls.id = 'py316-launcher-style';
+                ls.textContent = '#py316-launcher{width:48px;height:48px;margin:0 auto 8px;border-radius:50%;background:linear-gradient(135deg,#5865f2,#00d4ff);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(88,101,242,.4);transition:border-radius .15s,transform .15s;color:#fff;font-weight:800;font-size:12px;letter-spacing:.4px;user-select:none}#py316-launcher:hover{border-radius:16px;transform:scale(1.06)}';
+                document.head.appendChild(ls);
+            }
+        } catch {}
+        applyLauncher();
+        setInterval(applyLauncher, 3000);
+
+        $('#py-set-launcher').addEventListener('change', e => { settings.launcher = e.target.checked; saveSettings(); applyLauncher(); });
+        $('#py-set-min').addEventListener('change', e => { settings.startMin = e.target.checked; saveSettings(); });
+        $('#py-set-toast').addEventListener('change', e => { settings.toasts = e.target.checked; saveSettings(); });
+        $('#py-set-palette').addEventListener('change', e => { settings.palette = e.target.checked; saveSettings(); });
+        panel.querySelectorAll('[data-mod]').forEach(cb => cb.addEventListener('change', () => {
+            settings.modules[cb.dataset.mod] = cb.checked;
+            saveSettings();
+            applyModules();
+            log(`${cb.dataset.mod} module ${cb.checked ? 'enabled' : 'disabled'}`, 'info');
+        }));
+
+        ui.setAbout = () => {
+            const about = $('#py-about');
+            if (about) about.textContent = `${CFG.brand.name} v${__version} · ${ctx?.globalName || ctx?.username || 'connecting'} · ${CFG.brand.author}`;
+        };
+        ui.setChangelog = (text) => { const el = $('#py-changelog'); if (el) el.textContent = text || 'Up to date.'; };
+        ui.setAbout();
+
+        $('#py-check-upd').addEventListener('click', async () => {
+            log('Checking for updates…', 'info');
+            try {
+                const repo = window.__py316Repo;
+                if (!repo) { log('No repo configured', 'warn'); return; }
+                const r = await fetch(`${repo}/version.json?t=${Date.now()}`, { cache: 'no-store' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const j = await r.json();
+                ui.setChangelog?.(`Latest: v${j.version}\nCurrent: v${__version}\n\n${j.changelog || ''}`);
+                if (String(j.version) === String(__version)) { log('Already up to date', 'success'); uiToast('Up to date', 'success'); }
+                else { log(`Update available: v${j.version}`, 'warn'); uiToast(`Update v${j.version} available`, 'success'); }
+            } catch (e) { log('Update check failed: ' + e.message, 'error'); }
+        });
+
+        applyModules();
+
         setTimeout(() => {
             load.classList.add('done');
-            setTimeout(() => { try { load.remove(); } catch {} setMin(false); }, 700);
+            setTimeout(() => { try { load.remove(); } catch {} setMin(!!settings.startMin); }, 700);
         }, 4000);
 
         log(`${CFG.brand.name} v${CFG.brand.version} ready`, 'success');
@@ -1318,6 +1478,7 @@
             const r = await fetch(`${repo}/version.json?t=${Date.now()}`, { cache: 'no-store' });
             if (!r.ok) return;
             const j = await r.json();
+            ui.setChangelog?.(`Latest: v${j.version}\nCurrent: v${__version}\n\n${j.changelog || ''}`);
             if (j?.version && String(j.version) !== String(__version)) {
                 log(`Update available: ${j.version} (current ${__version})`, 'warn');
                 ui.setStatus?.(`update ${j.version} ready · v${__version}`);
@@ -1333,9 +1494,11 @@
             await ensureContext();
             log(`Welcome ${ctx.globalName}`, 'success');
             ui.setStatus?.(`${ctx.globalName} · v${__version}`);
+            ui.setAbout?.();
         } catch (e) {
             log(`Auth: ${e.message}`, 'error');
             ui.setStatus?.(`offline · v${__version}`);
+            ui.setAbout?.();
         }
     })();
 

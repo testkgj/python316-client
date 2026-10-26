@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.5.0
+- Vencord-style UX: native sidebar launcher button in the server bar.
+- Settings tab: interface toggles + per-module on/off (RPC, Profile, Tools, Forge), persisted.
+- About section with version/user, changelog from `version.json`, and Check-for-updates.
+- Start-minimized, toast, and palette toggles.
+- All settings stored in `py316-settings` and applied live.
+
 ## 4.4.2
 - Mark-All-Read rewritten: enumerates channels via REST (`/users/@me/guilds`,
   `/guilds/{id}/channels`, `/users/@me/channels`) then dispatches `BULK_ACK_CHANNELS`.
