@@ -1,9 +1,9 @@
 {
-  "version": "4.5.1",
-  "url": "https://raw.githubusercontent.com/testkgj/python316-client/main/main.js",
-  "sha256": "",
-  "loaderVersion": "2.1.1",
-  "loaderUrl": "https://raw.githubusercontent.com/testkgj/python316-client/main/injector.ps1",
-  "loaderSha256": "",
-  "changelog": "cookie-backed persistence (Discord renderer has no localStorage), Reload client button, settings/module toggles persist"
+    "version":  "4.5.1",
+    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/2827b09cf744ad2e4c204fbf67dea9e6aa1bb4be/main.js",
+    "sha256":  "aa26141bf4ba04044bf284f2532f401cd0d81609dc856fb6cf28232ada5daf52",
+    "loaderVersion":  "2.1.1",
+    "loaderUrl":  "https://raw.githubusercontent.com/testkgj/python316-client/2827b09cf744ad2e4c204fbf67dea9e6aa1bb4be/injector.ps1",
+    "loaderSha256":  "63adffcc7b5541ba8d2c0f7a471deb5c6c2aa28872f03244765115f9b93e1e9e",
+    "changelog":  "cookie-backed persistence (Discord renderer has no localStorage), Reload client button, settings/module toggles persist"
 }
