@@ -44,7 +44,6 @@ if ($LASTEXITCODE -ne 0) {
 function Get-NormalizedSha256([string]$Path) {
     $raw = [IO.File]::ReadAllBytes((Join-Path $PWD $Path))
     $t = [Text.Encoding]::UTF8.GetString($raw)
-    if ($t.Length -gt 0 -and $t[0] -eq [char]0xFEFF) { $t = $t.Substring(1) }
     $t = $t.Replace("`r`n", "`n")
     $sha = [Security.Cryptography.SHA256]::Create()
     $hash = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($t))
