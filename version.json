@@ -1,5 +1,5 @@
 {
-    "changelog":  "native sidebar + auto setup",
-    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/main/payload.js",
-    "version":  "4.1.0"
+  "version": "4.1.0",
+  "url": "https://raw.githubusercontent.com/testkgj/python316-client/main/payload.js",
+  "changelog": "native sidebar + auto setup"
 }
