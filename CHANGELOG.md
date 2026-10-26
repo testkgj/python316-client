@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.4.1 (loader 2.1.1)
+- Fixed CDP target selection: never target the Discord Overlay (`/popout`); prefer
+  `/channels/` then `/app`. This was causing flaky/absent injection.
+- Mark-All-Read: scans channel stores properly, collects real channel ids, clearer logs.
+- Command palette: `Run self-test` (gateway, REST, auth, token, webpack).
+
 ## 4.4.0 (loader 2.1.0)
 - SHA-256 integrity verification for payload and loader (hash must match `version.json`).
 - Loader self-update: watches `loaderVersion`, downloads, verifies, parse-checks, swaps itself, reloads.

@@ -17,7 +17,7 @@
     try { document.getElementById('py316-host')?.remove(); } catch {}
 
     // ==================== CONFIG ====================
-    const __version = '4.4.0';
+    const __version = '4.4.1';
     let __hb = null;
     const CFG = {
         brand: { name: 'Python3.16 Client', author: 'Python 3.16', version: __version },
@@ -288,16 +288,70 @@
     const markAllRead = () => {
         try {
             const wp = getWebpack();
-            const channelStore = Object.values(wp.c).find(m => m?.exports?.getChannels)?.exports;
-            if (!channelStore) return false;
-            const channels = channelStore.getChannels();
-            const dispatcher = Object.values(wp.c).find(m => m?.exports?.dispatch || m?.exports?.default?.dispatch);
-            const dispatch = dispatcher?.exports?.dispatch || dispatcher?.exports?.default?.dispatch;
-            if (!dispatch) return false;
-            dispatch({ type: 'BULK_ACK_CHANNELS', channels: Object.keys(channels) });
-            log('All channels marked read', 'success');
+            const ids = new Set();
+            let flux = null;
+
+            const visit = (t) => {
+                if (!t || (typeof t !== 'object' && typeof t !== 'function')) return;
+                try {
+                    if (!flux && typeof t.dispatch === 'function' && typeof t.subscribe === 'function') flux = t;
+                } catch {}
+                try {
+                    if (typeof t.getChannels === 'function') {
+                        const ch = t.getChannels();
+                        if (ch && typeof ch === 'object') {
+                            for (const k of Object.keys(ch)) {
+                                const v = ch[k];
+                                if (v && typeof v.id === 'string' && 'type' in v) ids.add(v.id);
+                            }
+                        }
+                    }
+                } catch {}
+                try {
+                    if (typeof t.getSortedChannels === 'function') {
+                        const sc = t.getSortedChannels();
+                        if (Array.isArray(sc)) {
+                            for (const it of sc) {
+                                const v = it && (it.channel || it);
+                                if (v && typeof v.id === 'string') ids.add(v.id);
+                            }
+                        } else if (sc && typeof sc === 'object') {
+                            for (const k of Object.keys(sc)) {
+                                const v = sc[k];
+                                if (v && typeof v.id === 'string') ids.add(v.id);
+                            }
+                        }
+                    }
+                } catch {}
+            };
+
+            const scan = (t) => {
+                visit(t);
+                try { visit(t && t.default); } catch {}
+                try { for (const k in t) visit(t[k]); } catch {}
+            };
+
+            // modules known to host channel stores
+            for (const [id, fn] of Object.entries(wp.m || {})) {
+                let src = '';
+                try { src = fn.toString(); } catch { continue; }
+                if (src.indexOf('getDMFromUserId') === -1 && src.indexOf('getChannels') === -1) continue;
+                try { scan(wp(id)); } catch {}
+            }
+            // cached exports too
+            for (const mod of Object.values(wp.c)) {
+                if (!mod?.exports) continue;
+                scan(mod.exports);
+            }
+
+            if (ids.size === 0) { log('Mark all read: no channels found', 'warn'); return false; }
+            if (!flux) { log('Mark all read: dispatcher not found', 'warn'); return false; }
+
+            flux.dispatch({ type: 'BULK_ACK_CHANNELS', channels: Array.from(ids) });
+            log(`Marked ${ids.size} channel(s) read`, 'success');
             return true;
-        } catch {
+        } catch (e) {
+            log('Mark all read: ' + (e?.message || e), 'error');
             return false;
         }
     };
@@ -1203,6 +1257,19 @@
         const palList = palWrap.querySelector('#py-pal-list');
         let palSel = 0, palItems = [], palOpen = false;
 
+        const runSelfTest = async () => {
+            log('Self-test starting…', 'info');
+            try { const gw = getGateway(); const ok = !!gw?.isConnected(); log('gateway: ' + (ok ? 'OK' : 'DOWN'), ok ? 'success' : 'error'); } catch (e) { log('gateway: ' + e.message, 'error'); }
+            try {
+                const rest = getRest();
+                log('rest: ' + (rest ? 'OK' : 'MISSING'), rest ? 'success' : 'error');
+                if (rest) { const c = await ensureContext(); log('auth: OK (' + (c.username || '?') + ')', 'success'); }
+            } catch (e) { log('auth: ' + e.message, 'error'); }
+            try { const t = getAuthToken(); log('token: ' + (t ? 'OK' : 'NONE'), t ? 'success' : 'error'); } catch (e) { log('token: ' + e.message, 'error'); }
+            try { const wp = getWebpack(); const n = wp?.c ? Object.keys(wp.c).length : 0; log('webpack: ' + (n ? n + ' modules' : 'MISSING'), n ? 'success' : 'error'); } catch (e) { log('webpack: ' + e.message, 'error'); }
+            log('Self-test done', 'info');
+        };
+
         const commands = [
             { k: 'Toggle panel', run: () => setMin(!panel.classList.contains('hidden')) },
             { k: 'Apply RPC', run: () => { const n = nameIn.value.trim(); if (n && applyRpc(n)) log('RPC → ' + n, 'success'); else log('Enter a name / gateway error', 'warn'); } },
@@ -1215,6 +1282,7 @@
             { k: 'Start stream forge', run: () => runForge($('#py-sstart'), () => startStreamForge(Math.max(1, +sh.value || 800))) },
             { k: 'Copy token', run: () => { const t = getAuthToken(); if (t) navigator.clipboard.writeText(t).then(() => log('Token copied', 'success')); else log('Token not found', 'error'); } },
             { k: 'Copy diagnostics', run: () => { const d = JSON.stringify({ v: __version, user: ctx?.username || null, log: [...logEl.children].slice(-80).map(e => e.textContent) }, null, 2); navigator.clipboard.writeText(d).then(() => log('Diagnostics copied', 'success')); } },
+            { k: 'Run self-test', run: () => runSelfTest() },
             { k: 'Show log', run: () => { panel.querySelectorAll('.py-tab').forEach(x => x.classList.toggle('active', x.dataset.t === 'log')); panel.querySelectorAll('.py-content').forEach(c => c.classList.toggle('active', c.dataset.c === 'log')); } },
             { k: 'Stop everything', run: () => { stopRpc(); try { gameState.stop?.(); } catch {} try { streamState.stop?.(); } catch {} rot.checked = false; log('Everything stopped', 'warn'); } },
         ];
@@ -1251,6 +1319,7 @@
             }
         });
         ui.openPalette = openPal;
+        ui.selfTest = runSelfTest;
 
         setTimeout(() => {
             load.classList.add('done');
@@ -1296,6 +1365,7 @@
         setStatus, setGhostMode, markAllRead, getAuthToken,
         startGameForge, startStreamForge,
         openPalette: () => ui.openPalette?.(),
+        selfTest: () => ui.selfTest?.(),
         destroy() {
             stopRpc();
             try { clearInterval(__hb); } catch {}

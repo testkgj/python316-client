@@ -15,7 +15,7 @@ param(
     [switch]$Quiet
 )
 
-$LoaderVersion = '2.1.0'
+$LoaderVersion = '2.1.1'
 
 $ErrorActionPreference = 'Stop'
 
@@ -125,9 +125,14 @@ function Invoke-CdpEval {
 
     $targets = Invoke-RestMethod -Uri ("http://127.0.0.1:{0}/json" -f $Port) -TimeoutSec 5 -UseBasicParsing
     $pages = @($targets | Where-Object { $_.type -eq 'page' -and $_.webSocketDebuggerUrl })
-    $page = $pages | Where-Object {
-        ($_.url -and $_.url -match 'discord') -or ($_.title -and $_.title -match 'Discord')
-    } | Select-Object -First 1
+    # Rank targets: the real app (/channels) first, never the Discord Overlay (/popout).
+    $page = $pages | Where-Object { $_.url -match 'discord\.com/channels/' } | Select-Object -First 1
+    if (-not $page) { $page = $pages | Where-Object { $_.url -match 'discord\.com/app' } | Select-Object -First 1 }
+    if (-not $page) {
+        $page = $pages | Where-Object {
+            $_.url -match 'discord' -and $_.url -notmatch '/popout' -and $_.title -notmatch 'Overlay'
+        } | Select-Object -First 1
+    }
     if (-not $page) { $page = $pages | Select-Object -First 1 }
     if (-not $page) { throw 'No injectable page target found' }
 

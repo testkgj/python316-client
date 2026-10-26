@@ -83,8 +83,11 @@ if (-not $targets) {
     Bad "debug port $Port not reachable (Discord not started by the loader?)"
 } else {
     Ok "debug port $Port reachable"
-    $page = @($targets | Where-Object { $_.type -eq 'page' -and $_.webSocketDebuggerUrl } | Where-Object { $_.url -match 'discord' -or $_.title -match 'Discord' } | Select-Object -First 1)
-    if (-not $page) { $page = @($targets | Where-Object { $_.type -eq 'page' -and $_.webSocketDebuggerUrl } | Select-Object -First 1) }
+    $pages = @($targets | Where-Object { $_.type -eq 'page' -and $_.webSocketDebuggerUrl })
+    $page = $pages | Where-Object { $_.url -match 'discord\.com/channels/' } | Select-Object -First 1
+    if (-not $page) { $page = $pages | Where-Object { $_.url -match 'discord\.com/app' } | Select-Object -First 1 }
+    if (-not $page) { $page = $pages | Where-Object { $_.url -match 'discord' -and $_.url -notmatch '/popout' -and $_.title -notmatch 'Overlay' } | Select-Object -First 1 }
+    if (-not $page) { $page = $pages | Select-Object -First 1 }
     if ($page) {
         Line 'target' $page.url
         try {
