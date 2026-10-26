@@ -148,22 +148,31 @@ if (-not $NoTask) {
 # ---------------------------------------------------------------- start now
 if (-not $NoStartNow) {
     Say ''
+    if ($registered) { try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch {} }
     $stopped = Stop-Watchers
     if ($stopped) { Say '  stopped previous watcher (reload)' 'DarkGray' }
+
+    for ($i = 0; $i -lt 10; $i++) {
+        $still = (Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -match 'injector\.ps1' -and $_.CommandLine -match 'Python316' } | Measure-Object).Count
+        if ($still -eq 0) { break }
+        Start-Sleep -Milliseconds 500
+    }
+
     Say 'Starting the watcher (attaches / restarts Discord once if needed)...' 'Cyan'
     if ($registered) {
-        try {
-            Start-ScheduledTask -TaskName $TaskName
-            Say '  watcher started via scheduled task.' 'Green'
-        } catch {
-            Say "  could not start task ($($_.Exception.Message)); launching directly" 'Yellow'
-            Start-Process -FilePath $psExe -ArgumentList ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $dstInjector) -WindowStyle Hidden | Out-Null
-        }
+        try { Start-ScheduledTask -TaskName $TaskName } catch { Say "  task start failed ($($_.Exception.Message))" 'Yellow' }
+        Start-Sleep -Seconds 2
+    }
+
+    $alive = (Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'injector\.ps1' -and $_.CommandLine -match 'Python316' } | Measure-Object).Count -gt 0
+    if ($alive) {
+        Say '  watcher running.' 'Green'
     } else {
         Start-Process -FilePath $psExe -ArgumentList ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $dstInjector) -WindowStyle Hidden | Out-Null
-        Say '  watcher started.' 'Green'
+        Say '  watcher started directly.' 'Green'
     }
-    Start-Sleep -Seconds 2
 } else {
     Say ''
     Say 'Skipped immediate attach (-NoStartNow). It will run at next Discord launch / logon.' 'Yellow'
