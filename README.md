@@ -49,12 +49,14 @@ silent.
 
 | File | Purpose |
 |------|---------|
-| `main.js` | Payload evaluated inside Discord (RPC, profile, forge, tools) |
+| `main.js` | Canonical payload evaluated inside Discord (RPC, profile, forge, tools) |
+| `payload.js` | Legacy v4.1.0 payload, kept for backward compatibility |
 | `injector.ps1` | Persistent watcher: launch + fetch + CDP inject |
 | `install.ps1` | One-time setup, registers the logon task |
 | `uninstall.ps1` | Removes task, startup entry, install dir |
 | `Setup.bat` | Double-click installer |
 | `config.json` | Port, payload URL, launch/restart behaviour |
+| `version.json` | Version + canonical payload URL |
 | `deploy.ps1` | Pushes this folder to GitHub |
 
 ## Config
