@@ -17,7 +17,7 @@
     try { document.getElementById('py316-host')?.remove(); } catch {}
 
     // ==================== CONFIG ====================
-    const __version = '4.5.1';
+    const __version = '4.5.2';
     let __hb = null;
     const CFG = {
         brand: { name: 'Python3.16 Client', author: 'Python 3.16', version: __version },
@@ -263,7 +263,7 @@
             }
             const app = catalog[i++];
             applyRpc(app.name || 'Unknown', app.id);
-            log(`RPC â†’ ${app.name}`, 'info');
+            log(`RPC -> ${app.name}`, 'info');
             rpcInterval = setTimeout(step, nextDelay());
         };
         rpcInterval = setTimeout(step, 0);
@@ -406,7 +406,7 @@
 
         const selected = catalog.sort(() => Math.random() - 0.5).slice(0, Math.min(CFG.game.titles, catalog.length));
         const hoursPer = totalHours / selected.length;
-        log(`Game forge â†’ ${selected.length} titles Â· ~${hoursPer.toFixed(1)}h each`, 'info');
+        log(`Game forge -> ${selected.length} titles - ~${hoursPer.toFixed(1)}h each`, 'info');
 
         const session = { heartbeatId: uuid(), signature: uuid(), seq: 0 };
 
@@ -517,9 +517,9 @@
                         forged += chunk.length;
                         logged += ch;
                         gameState.progress = Math.round((forged / selected.length) * 100);
-                        log(`Game ${i + 1}/${batches} Â· +${ch.toFixed(1)}h Â· total ${logged.toFixed(1)}h`, 'success');
+                        log(`Game ${i + 1}/${batches} - +${ch.toFixed(1)}h - total ${logged.toFixed(1)}h`, 'success');
                     } else {
-                        log(`Game batch ${i + 1} â†’ ${res?.status}`, 'warn');
+                        log(`Game batch ${i + 1} -> ${res?.status}`, 'warn');
                     }
                 } catch (e) {
                     log(`Game batch ${i + 1}: ${e?.message || e}`, 'error');
@@ -531,7 +531,7 @@
                 }
                 await sleep(CFG.game.delay + Math.floor(Math.random() * 320));
             }
-            if (gameState.active) log(`Game forge complete â†’ ${forged}/${selected.length} Â· ${logged.toFixed(1)}h`, 'success');
+            if (gameState.active) log(`Game forge complete -> ${forged}/${selected.length} - ${logged.toFixed(1)}h`, 'success');
         } finally {
             gameState.active = false;
             gameState.stop = null;
@@ -547,7 +547,7 @@
         const c = await ensureContext();
         const sessionCount = Math.min(CFG.stream.sessions, Math.max(14, Math.floor(totalHours / 8.5)));
         const hoursPer = totalHours / sessionCount;
-        log(`Stream forge â†’ ${sessionCount} sessions Â· ~${hoursPer.toFixed(1)}h`, 'info');
+        log(`Stream forge -> ${sessionCount} sessions - ~${hoursPer.toFixed(1)}h`, 'info');
 
         const session = { heartbeatId: uuid(), signature: uuid(), seq: 0 };
 
@@ -649,9 +649,9 @@
                         forged += size;
                         logged += ch;
                         streamState.progress = Math.round((forged / sessionCount) * 100);
-                        log(`Stream ${i + 1}/${batches} Â· +${ch.toFixed(1)}h Â· total ${logged.toFixed(1)}h`, 'success');
+                        log(`Stream ${i + 1}/${batches} - +${ch.toFixed(1)}h - total ${logged.toFixed(1)}h`, 'success');
                     } else {
-                        log(`Stream batch ${i + 1} â†’ ${res?.status}`, 'warn');
+                        log(`Stream batch ${i + 1} -> ${res?.status}`, 'warn');
                     }
                 } catch (e) {
                     log(`Stream batch ${i + 1}: ${e?.message || e}`, 'error');
@@ -663,7 +663,7 @@
                 }
                 await sleep(CFG.stream.delay + Math.floor(Math.random() * 260));
             }
-            if (streamState.active) log(`Stream forge complete â†’ ${forged} sessions Â· ${logged.toFixed(1)}h`, 'success');
+            if (streamState.active) log(`Stream forge complete -> ${forged} sessions - ${logged.toFixed(1)}h`, 'success');
         } finally {
             streamState.active = false;
             streamState.stop = null;
@@ -919,7 +919,7 @@
         panel.innerHTML = `
             <div class="py-head">
                 <div class="py-brand">${logo.replace(/id="g"/g,'id="g1"').replace(/url\(#g\)/g,'url(#g1)')}<span>PYTHON3.16</span></div>
-                <button class="py-icon py-min">âˆ’</button>
+                <button class="py-icon py-min">^'</button>
             </div>
             <div class="py-tabs">
                 <button class="py-tab active" data-t="rpc">RPC</button>
@@ -934,7 +934,7 @@
                     <div class="py-sec">
                         <div class="py-sec-h">Playing Status</div>
                         <div class="py-sec-d">Force a custom Playing activity via Gateway.</div>
-                        <input type="text" id="py-name" placeholder="Game nameâ€¦">
+                        <input type="text" id="py-name" placeholder="Game name...">
                         <div class="py-btn-row" style="margin-top:8px">
                             <button class="py-btn py-btn-p" id="py-apply">Apply</button>
                             <button class="py-btn py-btn-g" id="py-stop">Stop</button>
@@ -952,12 +952,12 @@
                 <div class="py-content" data-c="profile">
                     <div class="py-sec">
                         <div class="py-sec-h">Display Name</div>
-                        <input type="text" id="py-dname" maxlength="32" placeholder="Display nameâ€¦">
+                        <input type="text" id="py-dname" maxlength="32" placeholder="Display name...">
                         <button class="py-btn py-btn-p" id="py-dname-btn" style="margin-top:7px">Update</button>
                     </div>
                     <div class="py-sec">
                         <div class="py-sec-h">Bio</div>
-                        <textarea id="py-bio" maxlength="190" placeholder="Bioâ€¦"></textarea>
+                        <textarea id="py-bio" maxlength="190" placeholder="Bio..."></textarea>
                         <div class="py-btn-row" style="margin-top:7px">
                             <button class="py-btn py-btn-p" id="py-bio-btn">Save</button>
                             <button class="py-btn py-btn-g" id="py-bio-clr">Clear</button>
@@ -965,12 +965,12 @@
                     </div>
                     <div class="py-sec">
                         <div class="py-sec-h">Pronouns</div>
-                        <input type="text" id="py-pron" maxlength="40" placeholder="he/him, she/herâ€¦">
+                        <input type="text" id="py-pron" maxlength="40" placeholder="he/him, she/her...">
                         <button class="py-btn py-btn-p" id="py-pron-btn" style="margin-top:7px">Set</button>
                     </div>
                     <div class="py-sec">
                         <div class="py-sec-h">Custom Status</div>
-                        <input type="text" id="py-cstat" placeholder="Status textâ€¦">
+                        <input type="text" id="py-cstat" placeholder="Status text...">
                         <button class="py-btn py-btn-p" id="py-cstat-btn" style="margin-top:7px">Apply</button>
                     </div>
                     <div class="py-sec">
@@ -1097,7 +1097,7 @@
                         <div class="py-sec-h">About</div>
                         <div class="py-sec-d" id="py-about"></div>
                         <div class="py-btn-row"><button class="py-btn py-btn-p" id="py-check-upd">Check for updates</button></div>
-                        <div class="py-changelog" id="py-changelog">Loading changelogâ€¦</div>
+                        <div class="py-changelog" id="py-changelog">Loading changelog...</div>
                     </div>
                 </div>
 
@@ -1110,7 +1110,7 @@
             </div>
             <div class="py-foot">
                 <button class="py-btn py-btn-d" id="py-kill">Stop Everything</button>
-                <div class="py-author" id="py-status-line">Python3.16 Â· v${CFG.brand.version}</div>
+                <div class="py-author" id="py-status-line">Python3.16 - v${CFG.brand.version}</div>
             </div>`;
         root.appendChild(panel);
 
@@ -1224,7 +1224,7 @@
             const n = nameIn.value.trim();
             if (!n) return log('Enter a name', 'warn');
             stopRpc();
-            if (applyRpc(n)) log(`RPC â†’ ${n}`, 'success');
+            if (applyRpc(n)) log(`RPC -> ${n}`, 'success');
             else log('Gateway error', 'error');
         });
         $('#py-stop').addEventListener('click', () => { stopRpc(); rot.checked = false; });
@@ -1273,12 +1273,12 @@
             else log('Gateway error', 'error');
         });
         panel.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => {
-            if (setStatus(b.dataset.s)) log(`Status â†’ ${b.dataset.s}`, 'success');
+            if (setStatus(b.dataset.s)) log(`Status -> ${b.dataset.s}`, 'success');
             else log('Gateway error', 'error');
         }));
         $('#py-read').addEventListener('click', () => { markAllRead(); });
         $('#py-reset').addEventListener('click', () => {
-            log('Reloading clientâ€¦', 'warn');
+            log('Reloading client...', 'warn');
             setTimeout(() => { try { location.reload(); } catch (e) { log(e.message, 'error'); } }, 200);
         });
 
@@ -1292,7 +1292,7 @@
         sh.onchange = () => { store.set('py316-sh', sh.value); };
 
         const runForge = async (btn, fn) => {
-            btn.disabled = true; const t = btn.textContent; btn.textContent = 'Runningâ€¦';
+            btn.disabled = true; const t = btn.textContent; btn.textContent = 'Running...';
             try { await fn(); } catch (e) { log(e.message, 'error'); }
             finally { btn.disabled = false; btn.textContent = t; }
         };
@@ -1325,14 +1325,14 @@
         // ===== command palette =====
         const palWrap = document.createElement('div');
         palWrap.className = 'py-palette';
-        palWrap.innerHTML = '<div class="py-pal"><input id="py-pal-input" placeholder="Type a commandâ€¦ (Ctrl+Shift+K)"><div class="py-pal-list" id="py-pal-list"></div></div>';
+        palWrap.innerHTML = '<div class="py-pal"><input id="py-pal-input" placeholder="Type a command... (Ctrl+Shift+K)"><div class="py-pal-list" id="py-pal-list"></div></div>';
         root.appendChild(palWrap);
         const palInput = palWrap.querySelector('#py-pal-input');
         const palList = palWrap.querySelector('#py-pal-list');
         let palSel = 0, palItems = [], palOpen = false;
 
         const runSelfTest = async () => {
-            log('Self-test startingâ€¦', 'info');
+            log('Self-test starting...', 'info');
             try { const gw = getGateway(); const ok = !!gw?.isConnected(); log('gateway: ' + (ok ? 'OK' : 'DOWN'), ok ? 'success' : 'error'); } catch (e) { log('gateway: ' + e.message, 'error'); }
             try {
                 const rest = getRest();
@@ -1346,7 +1346,7 @@
 
         const commands = [
             { k: 'Toggle panel', run: () => setMin(!panel.classList.contains('hidden')) },
-            { k: 'Apply RPC', run: () => { const n = nameIn.value.trim(); if (n && applyRpc(n)) log('RPC â†’ ' + n, 'success'); else log('Enter a name / gateway error', 'warn'); } },
+            { k: 'Apply RPC', run: () => { const n = nameIn.value.trim(); if (n && applyRpc(n)) log('RPC -> ' + n, 'success'); else log('Enter a name / gateway error', 'warn'); } },
             { k: 'Stop RPC', run: () => { stopRpc(); rot.checked = false; } },
             { k: 'Toggle catalog rotation', run: () => { rot.checked = !rot.checked; rot.dispatchEvent(new Event('change')); } },
             { k: 'Ghost mode on', run: () => { $('#py-ghost').checked = true; setGhostMode(true); log('Ghost ON', 'success'); } },
@@ -1459,13 +1459,16 @@
 
         ui.setAbout = () => {
             const about = $('#py-about');
-            if (about) about.textContent = `${CFG.brand.name} v${__version} Â· ${ctx?.globalName || ctx?.username || 'connecting'} Â· ${CFG.brand.author}`;
+            if (about) about.textContent = `${CFG.brand.name} v${__version} - ${ctx?.globalName || ctx?.username || 'connecting'} - ${CFG.brand.author}`;
         };
         ui.setChangelog = (text) => { const el = $('#py-changelog'); if (el) el.textContent = text || 'Up to date.'; };
         ui.setAbout();
+        if (window.__py316Meta) {
+            ui.setChangelog?.(`Current: v${window.__py316Meta.version}\n\n${window.__py316Meta.changelog || ''}`);
+        }
 
         $('#py-check-upd').addEventListener('click', async () => {
-            log('Checking for updatesâ€¦', 'info');
+            log('Checking for updates...', 'info');
             try {
                 const repo = window.__py316Repo;
                 if (!repo) { log('No repo configured', 'warn'); return; }
@@ -1499,7 +1502,7 @@
             ui.setChangelog?.(`Latest: v${j.version}\nCurrent: v${__version}\n\n${j.changelog || ''}`);
             if (j?.version && String(j.version) !== String(__version)) {
                 log(`Update available: ${j.version} (current ${__version})`, 'warn');
-                ui.setStatus?.(`update ${j.version} ready Â· v${__version}`);
+                ui.setStatus?.(`update ${j.version} ready - v${__version}`);
             }
         } catch {}
     };
@@ -1511,11 +1514,11 @@
         try {
             await ensureContext();
             log(`Welcome ${ctx.globalName}`, 'success');
-            ui.setStatus?.(`${ctx.globalName} Â· v${__version}`);
+            ui.setStatus?.(`${ctx.globalName} - v${__version}`);
             ui.setAbout?.();
         } catch (e) {
             log(`Auth: ${e.message}`, 'error');
-            ui.setStatus?.(`offline Â· v${__version}`);
+            ui.setStatus?.(`offline - v${__version}`);
             ui.setAbout?.();
         }
     })();

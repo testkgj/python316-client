@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.5.2 (loader 2.1.2)
+- Loader now passes `window.__py316Meta` (version + changelog) before injecting, so About
+  works without any in-page network request (Discord CSP blocks raw GitHub fetches).
+- Payload normalized to pure ASCII / LF / no BOM to avoid encoding issues.
+
 ## 4.5.1
 - Persistence fixed: Discord's renderer has no `localStorage`; prefs now use a cookie store.
 - Settings and module toggles now actually persist across reloads.

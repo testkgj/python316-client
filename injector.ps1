@@ -15,7 +15,7 @@ param(
     [switch]$Quiet
 )
 
-$LoaderVersion = '2.1.1'
+$LoaderVersion = '2.1.2'
 
 $ErrorActionPreference = 'Stop'
 
@@ -241,6 +241,7 @@ function Get-RemoteVersionJson {
                     Version      = [string]$j.version
                     Url          = [string]$j.url
                     Sha256       = [string]$j.sha256
+                    Changelog    = [string]$j.changelog
                     LoaderVersion= [string]$j.loaderVersion
                     LoaderUrl    = [string]$j.loaderUrl
                     LoaderSha256 = [string]$j.loaderSha256
@@ -294,7 +295,7 @@ function Get-RemotePayload {
             if ($code -match '__version\s*=\s*[''"]([^''"]+)[''"]') { $version = $Matches[1] }
         }
         Move-Item -LiteralPath $tmp -Destination $MainPath -Force
-        return [pscustomobject]@{ Code = $code; Version = $version; Url = $url }
+        return [pscustomobject]@{ Code = $code; Version = $version; Url = $url; Changelog = $(if ($Meta) { [string]$Meta.Changelog } else { '' }) }
     } catch {
         Write-Log "Download failed: $($_.Exception.Message)" 'WARN'
         return $null
@@ -309,7 +310,7 @@ function Get-LocalPayload {
     if (-not (Test-PayloadCode -Code $code)) { return $null }
     $version = $null
     if ($code -match '__version\s*=\s*[''"]([^''"]+)[''"]') { $version = $Matches[1] }
-    return [pscustomobject]@{ Code = $code; Version = $version; Url = $MainPath }
+    return [pscustomobject]@{ Code = $code; Version = $version; Url = $MainPath; Changelog = '' }
 }
 
 function Get-Payload {
@@ -446,6 +447,14 @@ function Invoke-Pass {
             $safeBase = $RepoBase -replace "'", "''"
             [void](Invoke-CdpEval -Code ("window.__py316Repo = '{0}';" -f $safeBase))
         }
+
+        $metaObj = @{
+            version   = if ($payload.Version) { [string]$payload.Version } else { '' }
+            changelog = if ($payload.PSObject.Properties['Changelog']) { [string]$payload.Changelog } else { '' }
+            repo      = if ($RepoBase) { [string]$RepoBase } else { '' }
+        }
+        $metaJson = $metaObj | ConvertTo-Json -Compress
+        [void](Invoke-CdpEval -Code ("window.__py316Meta = {0};" -f $metaJson))
 
         [void](Invoke-CdpEval -Code $payload.Code)
         Start-Sleep -Milliseconds 250
