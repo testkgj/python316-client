@@ -1,9 +1,9 @@
 {
-  "version": "4.4.1",
-  "url": "https://raw.githubusercontent.com/testkgj/python316-client/main/main.js",
-  "sha256": "",
-  "loaderVersion": "2.1.1",
-  "loaderUrl": "https://raw.githubusercontent.com/testkgj/python316-client/main/injector.ps1",
-  "loaderSha256": "",
-  "changelog": "fix CDP target selection (ignore Discord Overlay/popout), robust Mark-All-Read scan, self-test command"
+    "version":  "4.4.1",
+    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/da5ebc7e545a92985ade265807de853bd52cc2a2/main.js",
+    "sha256":  "5d2f4a0e75ea31597d023393e06e537c8058a85767e2cfbe0af2692f2cf80d22",
+    "loaderVersion":  "2.1.1",
+    "loaderUrl":  "https://raw.githubusercontent.com/testkgj/python316-client/da5ebc7e545a92985ade265807de853bd52cc2a2/injector.ps1",
+    "loaderSha256":  "63adffcc7b5541ba8d2c0f7a471deb5c6c2aa28872f03244765115f9b93e1e9e",
+    "changelog":  "fix CDP target selection (ignore Discord Overlay/popout), robust Mark-All-Read scan, self-test command"
 }
