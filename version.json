@@ -1,9 +1,9 @@
 {
-  "version": "4.5.2",
-  "url": "https://raw.githubusercontent.com/testkgj/python316-client/main/main.js",
-  "sha256": "",
-  "loaderVersion": "2.1.2",
-  "loaderUrl": "https://raw.githubusercontent.com/testkgj/python316-client/main/injector.ps1",
-  "loaderSha256": "",
-  "changelog": "Vencord-style UI (sidebar launcher, Settings + modules, About), cookie persistence, metadata passed by the loader (no CSP fetch), ASCII-clean payload"
+    "version":  "4.5.2",
+    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/22bd87ff8ad7d7d27b55998d6c6178a8b51396cd/main.js",
+    "sha256":  "68351421bebc3fb7483ea44801bc1f4ebd87d905ecd4cd4e559038b8d874afed",
+    "loaderVersion":  "2.1.2",
+    "loaderUrl":  "https://raw.githubusercontent.com/testkgj/python316-client/22bd87ff8ad7d7d27b55998d6c6178a8b51396cd/injector.ps1",
+    "loaderSha256":  "d327ba3d40b66e28e4d302df2d4915a7e2f7dc5545fb471969a1f5b68351f978",
+    "changelog":  "Vencord-style UI (sidebar launcher, Settings + modules, About), cookie persistence, metadata passed by the loader (no CSP fetch), ASCII-clean payload"
 }
