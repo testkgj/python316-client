@@ -1,9 +1,9 @@
 {
     "version":  "4.4.0",
-    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/5ec5c01d2929d6883f481cd6c44d07e33bd59d91/main.js",
+    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/2f8e9949e6447d4778ae855d102103be90097822/main.js",
     "sha256":  "9eff498e3ffdd36790be399294b755d92d22c1ff046a9089b821530dae7022a6",
     "loaderVersion":  "2.1.0",
-    "loaderUrl":  "https://raw.githubusercontent.com/testkgj/python316-client/5ec5c01d2929d6883f481cd6c44d07e33bd59d91/injector.ps1",
-    "loaderSha256":  "40176f0f24de168a6c77719cf26cbb605370e6492a8bfdc491ba039b898ac77a",
+    "loaderUrl":  "https://raw.githubusercontent.com/testkgj/python316-client/2f8e9949e6447d4778ae855d102103be90097822/injector.ps1",
+    "loaderSha256":  "7afe28c822ec2c048213e213bf4ac78a9ebfcd5cade6cd332fd4125ea3d5b484",
     "changelog":  "SHA-256 integrity, loader self-update, heartbeat watchdog, command palette, forge progress+cancel"
 }
