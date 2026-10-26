@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$Repo = 'python316-client',
     [string]$Branch = 'main',
@@ -47,7 +47,7 @@ if (Test-Path 'version.json') {
     $pinned = "https://raw.githubusercontent.com/$full/$codeSha/main.js"
     if ($v.url -ne $pinned) {
         $v.url = $pinned
-        ($v | ConvertTo-Json) | Set-Content 'version.json' -Encoding UTF8
+        [IO.File]::WriteAllText((Join-Path $PWD 'version.json'), ($v | ConvertTo-Json), (New-Object System.Text.UTF8Encoding($false)))
         git add 'version.json'
         git commit -m ("release: pin payload to {0}" -f $codeSha.Substring(0, 7)) | Out-Null
         $codeSha = (git rev-parse HEAD).Trim()
@@ -63,3 +63,4 @@ gh repo edit $full --default-branch $Branch *> $null
 
 Write-Host "Live at:     https://github.com/$full" -ForegroundColor Green
 Write-Host "Raw payload: https://raw.githubusercontent.com/$full/$Branch/main.js" -ForegroundColor Green
+

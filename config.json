@@ -4,5 +4,6 @@
   "repoBase": "https://raw.githubusercontent.com/testkgj/python316-client/main",
   "autoLaunch": true,
   "restartExisting": true,
-  "pollSeconds": 6
+  "pollSeconds": 6,
+  "updateCheckSeconds": 600
 }

