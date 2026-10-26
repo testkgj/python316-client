@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.5.1
+- Persistence fixed: Discord's renderer has no `localStorage`; prefs now use a cookie store.
+- Settings and module toggles now actually persist across reloads.
+- Replaced the broken "Reset token" with a "Reload client" button (auto re-inject).
+
 ## 4.5.0
 - Vencord-style UX: native sidebar launcher button in the server bar.
 - Settings tab: interface toggles + per-module on/off (RPC, Profile, Tools, Forge), persisted.

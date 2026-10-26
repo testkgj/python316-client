@@ -17,13 +17,33 @@
     try { document.getElementById('py316-host')?.remove(); } catch {}
 
     // ==================== CONFIG ====================
-    const __version = '4.5.0';
+    const __version = '4.5.1';
     let __hb = null;
     const CFG = {
         brand: { name: 'Python3.16 Client', author: 'Python 3.16', version: __version },
         rpc:   { maxApps: 160, intervalMin: 48, intervalMax: 72 },
         game:  { titles: 340, batchSize: 14, delay: 880, wobble: true },
         stream:{ sessions: 48, batchSize: 9, delay: 780, wobble: true }
+    };
+
+    // ==================== STORAGE ====================
+    // Discord's renderer does not expose localStorage; persist small prefs in a cookie.
+    const store = {
+        get(key, def) {
+            try {
+                const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const m = document.cookie.match(new RegExp('(?:^|; )' + esc + '=([^;]*)'));
+                if (!m) return def;
+                return JSON.parse(decodeURIComponent(m[1]));
+            } catch { return def; }
+        },
+        set(key, val) {
+            try {
+                const v = encodeURIComponent(JSON.stringify(val));
+                if (v.length > 3800) return;
+                document.cookie = key + '=' + v + '; path=/; max-age=31536000; SameSite=Lax';
+            } catch {}
+        }
     };
 
     // ==================== SETTINGS ====================
@@ -37,13 +57,10 @@
     };
     let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
     try {
-        const raw = localStorage.getItem(SETTINGS_KEY);
-        if (raw) {
-            const s = JSON.parse(raw);
-            settings = Object.assign(settings, s, { modules: Object.assign({}, DEFAULT_SETTINGS.modules, s.modules || {}) });
-        }
+        const s = store.get(SETTINGS_KEY, null);
+        if (s) settings = Object.assign(settings, s, { modules: Object.assign({}, DEFAULT_SETTINGS.modules, s.modules || {}) });
     } catch {}
-    const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {} };
+    const saveSettings = () => { store.set(SETTINGS_KEY, settings); };
 
     // ==================== UTILS ====================
     const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -119,8 +136,10 @@
             }
         } catch {}
         try {
-            const raw = localStorage.getItem('token');
-            if (raw) return raw.replace(/^"|"$/g, '');
+            if (typeof localStorage !== 'undefined') {
+                const raw = localStorage.getItem('token');
+                if (raw) return raw.replace(/^"|"$/g, '');
+            }
         } catch {}
         return null;
     };
@@ -244,7 +263,7 @@
             }
             const app = catalog[i++];
             applyRpc(app.name || 'Unknown', app.id);
-            log(`RPC → ${app.name}`, 'info');
+            log(`RPC â†’ ${app.name}`, 'info');
             rpcInterval = setTimeout(step, nextDelay());
         };
         rpcInterval = setTimeout(step, 0);
@@ -387,7 +406,7 @@
 
         const selected = catalog.sort(() => Math.random() - 0.5).slice(0, Math.min(CFG.game.titles, catalog.length));
         const hoursPer = totalHours / selected.length;
-        log(`Game forge → ${selected.length} titles · ~${hoursPer.toFixed(1)}h each`, 'info');
+        log(`Game forge â†’ ${selected.length} titles Â· ~${hoursPer.toFixed(1)}h each`, 'info');
 
         const session = { heartbeatId: uuid(), signature: uuid(), seq: 0 };
 
@@ -498,9 +517,9 @@
                         forged += chunk.length;
                         logged += ch;
                         gameState.progress = Math.round((forged / selected.length) * 100);
-                        log(`Game ${i + 1}/${batches} · +${ch.toFixed(1)}h · total ${logged.toFixed(1)}h`, 'success');
+                        log(`Game ${i + 1}/${batches} Â· +${ch.toFixed(1)}h Â· total ${logged.toFixed(1)}h`, 'success');
                     } else {
-                        log(`Game batch ${i + 1} → ${res?.status}`, 'warn');
+                        log(`Game batch ${i + 1} â†’ ${res?.status}`, 'warn');
                     }
                 } catch (e) {
                     log(`Game batch ${i + 1}: ${e?.message || e}`, 'error');
@@ -512,7 +531,7 @@
                 }
                 await sleep(CFG.game.delay + Math.floor(Math.random() * 320));
             }
-            if (gameState.active) log(`Game forge complete → ${forged}/${selected.length} · ${logged.toFixed(1)}h`, 'success');
+            if (gameState.active) log(`Game forge complete â†’ ${forged}/${selected.length} Â· ${logged.toFixed(1)}h`, 'success');
         } finally {
             gameState.active = false;
             gameState.stop = null;
@@ -528,7 +547,7 @@
         const c = await ensureContext();
         const sessionCount = Math.min(CFG.stream.sessions, Math.max(14, Math.floor(totalHours / 8.5)));
         const hoursPer = totalHours / sessionCount;
-        log(`Stream forge → ${sessionCount} sessions · ~${hoursPer.toFixed(1)}h`, 'info');
+        log(`Stream forge â†’ ${sessionCount} sessions Â· ~${hoursPer.toFixed(1)}h`, 'info');
 
         const session = { heartbeatId: uuid(), signature: uuid(), seq: 0 };
 
@@ -630,9 +649,9 @@
                         forged += size;
                         logged += ch;
                         streamState.progress = Math.round((forged / sessionCount) * 100);
-                        log(`Stream ${i + 1}/${batches} · +${ch.toFixed(1)}h · total ${logged.toFixed(1)}h`, 'success');
+                        log(`Stream ${i + 1}/${batches} Â· +${ch.toFixed(1)}h Â· total ${logged.toFixed(1)}h`, 'success');
                     } else {
-                        log(`Stream batch ${i + 1} → ${res?.status}`, 'warn');
+                        log(`Stream batch ${i + 1} â†’ ${res?.status}`, 'warn');
                     }
                 } catch (e) {
                     log(`Stream batch ${i + 1}: ${e?.message || e}`, 'error');
@@ -644,7 +663,7 @@
                 }
                 await sleep(CFG.stream.delay + Math.floor(Math.random() * 260));
             }
-            if (streamState.active) log(`Stream forge complete → ${forged} sessions · ${logged.toFixed(1)}h`, 'success');
+            if (streamState.active) log(`Stream forge complete â†’ ${forged} sessions Â· ${logged.toFixed(1)}h`, 'success');
         } finally {
             streamState.active = false;
             streamState.stop = null;
@@ -900,7 +919,7 @@
         panel.innerHTML = `
             <div class="py-head">
                 <div class="py-brand">${logo.replace(/id="g"/g,'id="g1"').replace(/url\(#g\)/g,'url(#g1)')}<span>PYTHON3.16</span></div>
-                <button class="py-icon py-min">−</button>
+                <button class="py-icon py-min">âˆ’</button>
             </div>
             <div class="py-tabs">
                 <button class="py-tab active" data-t="rpc">RPC</button>
@@ -915,7 +934,7 @@
                     <div class="py-sec">
                         <div class="py-sec-h">Playing Status</div>
                         <div class="py-sec-d">Force a custom Playing activity via Gateway.</div>
-                        <input type="text" id="py-name" placeholder="Game name…">
+                        <input type="text" id="py-name" placeholder="Game nameâ€¦">
                         <div class="py-btn-row" style="margin-top:8px">
                             <button class="py-btn py-btn-p" id="py-apply">Apply</button>
                             <button class="py-btn py-btn-g" id="py-stop">Stop</button>
@@ -933,12 +952,12 @@
                 <div class="py-content" data-c="profile">
                     <div class="py-sec">
                         <div class="py-sec-h">Display Name</div>
-                        <input type="text" id="py-dname" maxlength="32" placeholder="Display name…">
+                        <input type="text" id="py-dname" maxlength="32" placeholder="Display nameâ€¦">
                         <button class="py-btn py-btn-p" id="py-dname-btn" style="margin-top:7px">Update</button>
                     </div>
                     <div class="py-sec">
                         <div class="py-sec-h">Bio</div>
-                        <textarea id="py-bio" maxlength="190" placeholder="Bio…"></textarea>
+                        <textarea id="py-bio" maxlength="190" placeholder="Bioâ€¦"></textarea>
                         <div class="py-btn-row" style="margin-top:7px">
                             <button class="py-btn py-btn-p" id="py-bio-btn">Save</button>
                             <button class="py-btn py-btn-g" id="py-bio-clr">Clear</button>
@@ -946,12 +965,12 @@
                     </div>
                     <div class="py-sec">
                         <div class="py-sec-h">Pronouns</div>
-                        <input type="text" id="py-pron" maxlength="40" placeholder="he/him, she/her…">
+                        <input type="text" id="py-pron" maxlength="40" placeholder="he/him, she/herâ€¦">
                         <button class="py-btn py-btn-p" id="py-pron-btn" style="margin-top:7px">Set</button>
                     </div>
                     <div class="py-sec">
                         <div class="py-sec-h">Custom Status</div>
-                        <input type="text" id="py-cstat" placeholder="Status text…">
+                        <input type="text" id="py-cstat" placeholder="Status textâ€¦">
                         <button class="py-btn py-btn-p" id="py-cstat-btn" style="margin-top:7px">Apply</button>
                     </div>
                     <div class="py-sec">
@@ -998,9 +1017,9 @@
                         <button class="py-btn py-btn-p" id="py-read">Mark All Read</button>
                     </div>
                     <div class="py-sec">
-                        <div class="py-sec-h">Reset Token</div>
-                        <div class="py-sec-d">Force logout + new token.</div>
-                        <button class="py-btn py-btn-d" id="py-reset">Reset</button>
+                        <div class="py-sec-h">Client</div>
+                        <div class="py-sec-d">Reload the Discord window; the loader re-injects automatically.</div>
+                        <button class="py-btn py-btn-g" id="py-reset">Reload client</button>
                     </div>
                 </div>
 
@@ -1078,7 +1097,7 @@
                         <div class="py-sec-h">About</div>
                         <div class="py-sec-d" id="py-about"></div>
                         <div class="py-btn-row"><button class="py-btn py-btn-p" id="py-check-upd">Check for updates</button></div>
-                        <div class="py-changelog" id="py-changelog">Loading changelog…</div>
+                        <div class="py-changelog" id="py-changelog">Loading changelogâ€¦</div>
                     </div>
                 </div>
 
@@ -1091,7 +1110,7 @@
             </div>
             <div class="py-foot">
                 <button class="py-btn py-btn-d" id="py-kill">Stop Everything</button>
-                <div class="py-author" id="py-status-line">Python3.16 · v${CFG.brand.version}</div>
+                <div class="py-author" id="py-status-line">Python3.16 Â· v${CFG.brand.version}</div>
             </div>`;
         root.appendChild(panel);
 
@@ -1135,11 +1154,11 @@
         let pos = { x: Math.max(0, innerWidth - 430), y: 80 };
         let orbPos = { x: Math.max(0, innerWidth - 80), y: 100 };
         try {
-            const s = JSON.parse(localStorage.getItem('py316-pos') || 'null');
+            const s = store.get('py316-pos', null);
             if (s?.panel) pos = s.panel;
             if (s?.orb) orbPos = s.orb;
         } catch {}
-        const save = () => { try { localStorage.setItem('py316-pos', JSON.stringify({ panel: pos, orb: orbPos })); } catch {} };
+        const save = () => { store.set('py316-pos', { panel: pos, orb: orbPos }); };
         const clampP = (p, w, h) => ({ x: clamp(p.x, 0, innerWidth - w), y: clamp(p.y, 0, innerHeight - h) });
         const applyP = () => { pos = clampP(pos, 400, 440); panel.style.left = pos.x + 'px'; panel.style.top = pos.y + 'px'; };
         const applyO = () => { orbPos = clampP(orbPos, 48, 48); orb.style.left = orbPos.x + 'px'; orb.style.top = orbPos.y + 'px'; };
@@ -1197,15 +1216,15 @@
         // RPC
         const nameIn = $('#py-name');
         const rot = $('#py-rot');
-        try { const v = localStorage.getItem('py316-name'); if (v) nameIn.value = v; } catch {}
-        nameIn.addEventListener('input', () => { try { localStorage.setItem('py316-name', nameIn.value); } catch {} });
+        try { const v = store.get('py316-name', ''); if (v) nameIn.value = v; } catch {}
+        nameIn.addEventListener('input', () => { store.set('py316-name', nameIn.value); });
         ui.onRpcEnded = () => { rot.checked = false; };
 
         $('#py-apply').addEventListener('click', () => {
             const n = nameIn.value.trim();
             if (!n) return log('Enter a name', 'warn');
             stopRpc();
-            if (applyRpc(n)) log(`RPC → ${n}`, 'success');
+            if (applyRpc(n)) log(`RPC â†’ ${n}`, 'success');
             else log('Gateway error', 'error');
         });
         $('#py-stop').addEventListener('click', () => { stopRpc(); rot.checked = false; });
@@ -1254,27 +1273,26 @@
             else log('Gateway error', 'error');
         });
         panel.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => {
-            if (setStatus(b.dataset.s)) log(`Status → ${b.dataset.s}`, 'success');
+            if (setStatus(b.dataset.s)) log(`Status â†’ ${b.dataset.s}`, 'success');
             else log('Gateway error', 'error');
         }));
         $('#py-read').addEventListener('click', () => { markAllRead(); });
         $('#py-reset').addEventListener('click', () => {
-            if (confirm('Force logout + new token?')) {
-                try { localStorage.removeItem('token'); location.reload(); } catch (e) { log(e.message, 'error'); }
-            }
+            log('Reloading clientâ€¦', 'warn');
+            setTimeout(() => { try { location.reload(); } catch (e) { log(e.message, 'error'); } }, 200);
         });
 
         // Forge
         const gh = $('#py-gh'), sh = $('#py-sh');
         try {
-            const a = localStorage.getItem('py316-gh'); if (a) gh.value = a;
-            const b = localStorage.getItem('py316-sh'); if (b) sh.value = b;
+            const a = store.get('py316-gh', null); if (a != null) gh.value = a;
+            const b = store.get('py316-sh', null); if (b != null) sh.value = b;
         } catch {}
-        gh.onchange = () => { try { localStorage.setItem('py316-gh', gh.value); } catch {} };
-        sh.onchange = () => { try { localStorage.setItem('py316-sh', sh.value); } catch {} };
+        gh.onchange = () => { store.set('py316-gh', gh.value); };
+        sh.onchange = () => { store.set('py316-sh', sh.value); };
 
         const runForge = async (btn, fn) => {
-            btn.disabled = true; const t = btn.textContent; btn.textContent = 'Running…';
+            btn.disabled = true; const t = btn.textContent; btn.textContent = 'Runningâ€¦';
             try { await fn(); } catch (e) { log(e.message, 'error'); }
             finally { btn.disabled = false; btn.textContent = t; }
         };
@@ -1307,14 +1325,14 @@
         // ===== command palette =====
         const palWrap = document.createElement('div');
         palWrap.className = 'py-palette';
-        palWrap.innerHTML = '<div class="py-pal"><input id="py-pal-input" placeholder="Type a command… (Ctrl+Shift+K)"><div class="py-pal-list" id="py-pal-list"></div></div>';
+        palWrap.innerHTML = '<div class="py-pal"><input id="py-pal-input" placeholder="Type a commandâ€¦ (Ctrl+Shift+K)"><div class="py-pal-list" id="py-pal-list"></div></div>';
         root.appendChild(palWrap);
         const palInput = palWrap.querySelector('#py-pal-input');
         const palList = palWrap.querySelector('#py-pal-list');
         let palSel = 0, palItems = [], palOpen = false;
 
         const runSelfTest = async () => {
-            log('Self-test starting…', 'info');
+            log('Self-test startingâ€¦', 'info');
             try { const gw = getGateway(); const ok = !!gw?.isConnected(); log('gateway: ' + (ok ? 'OK' : 'DOWN'), ok ? 'success' : 'error'); } catch (e) { log('gateway: ' + e.message, 'error'); }
             try {
                 const rest = getRest();
@@ -1328,7 +1346,7 @@
 
         const commands = [
             { k: 'Toggle panel', run: () => setMin(!panel.classList.contains('hidden')) },
-            { k: 'Apply RPC', run: () => { const n = nameIn.value.trim(); if (n && applyRpc(n)) log('RPC → ' + n, 'success'); else log('Enter a name / gateway error', 'warn'); } },
+            { k: 'Apply RPC', run: () => { const n = nameIn.value.trim(); if (n && applyRpc(n)) log('RPC â†’ ' + n, 'success'); else log('Enter a name / gateway error', 'warn'); } },
             { k: 'Stop RPC', run: () => { stopRpc(); rot.checked = false; } },
             { k: 'Toggle catalog rotation', run: () => { rot.checked = !rot.checked; rot.dispatchEvent(new Event('change')); } },
             { k: 'Ghost mode on', run: () => { $('#py-ghost').checked = true; setGhostMode(true); log('Ghost ON', 'success'); } },
@@ -1441,13 +1459,13 @@
 
         ui.setAbout = () => {
             const about = $('#py-about');
-            if (about) about.textContent = `${CFG.brand.name} v${__version} · ${ctx?.globalName || ctx?.username || 'connecting'} · ${CFG.brand.author}`;
+            if (about) about.textContent = `${CFG.brand.name} v${__version} Â· ${ctx?.globalName || ctx?.username || 'connecting'} Â· ${CFG.brand.author}`;
         };
         ui.setChangelog = (text) => { const el = $('#py-changelog'); if (el) el.textContent = text || 'Up to date.'; };
         ui.setAbout();
 
         $('#py-check-upd').addEventListener('click', async () => {
-            log('Checking for updates…', 'info');
+            log('Checking for updatesâ€¦', 'info');
             try {
                 const repo = window.__py316Repo;
                 if (!repo) { log('No repo configured', 'warn'); return; }
@@ -1481,7 +1499,7 @@
             ui.setChangelog?.(`Latest: v${j.version}\nCurrent: v${__version}\n\n${j.changelog || ''}`);
             if (j?.version && String(j.version) !== String(__version)) {
                 log(`Update available: ${j.version} (current ${__version})`, 'warn');
-                ui.setStatus?.(`update ${j.version} ready · v${__version}`);
+                ui.setStatus?.(`update ${j.version} ready Â· v${__version}`);
             }
         } catch {}
     };
@@ -1493,11 +1511,11 @@
         try {
             await ensureContext();
             log(`Welcome ${ctx.globalName}`, 'success');
-            ui.setStatus?.(`${ctx.globalName} · v${__version}`);
+            ui.setStatus?.(`${ctx.globalName} Â· v${__version}`);
             ui.setAbout?.();
         } catch (e) {
             log(`Auth: ${e.message}`, 'error');
-            ui.setStatus?.(`offline · v${__version}`);
+            ui.setStatus?.(`offline Â· v${__version}`);
             ui.setAbout?.();
         }
     })();
@@ -1523,3 +1541,4 @@
     try { window.__python316.__alive = now(); } catch {}
     __hb = setInterval(() => { try { if (window.__python316) window.__python316.__alive = now(); } catch {} }, 4000);
 })();
+

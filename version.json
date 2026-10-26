@@ -1,9 +1,9 @@
 {
-    "version":  "4.5.0",
-    "url":  "https://raw.githubusercontent.com/testkgj/python316-client/8aa6b864b612e4d23afec7156760c17cf29533c3/main.js",
-    "sha256":  "beb74de0f078a79b59574063f6f21014e3db1427c529fce7aa19821e216686e2",
-    "loaderVersion":  "2.1.1",
-    "loaderUrl":  "https://raw.githubusercontent.com/testkgj/python316-client/8aa6b864b612e4d23afec7156760c17cf29533c3/injector.ps1",
-    "loaderSha256":  "63adffcc7b5541ba8d2c0f7a471deb5c6c2aa28872f03244765115f9b93e1e9e",
-    "changelog":  "Vencord-style: sidebar launcher, Settings tab with module toggles, About/changelog + update check, persisted settings"
+  "version": "4.5.1",
+  "url": "https://raw.githubusercontent.com/testkgj/python316-client/main/main.js",
+  "sha256": "",
+  "loaderVersion": "2.1.1",
+  "loaderUrl": "https://raw.githubusercontent.com/testkgj/python316-client/main/injector.ps1",
+  "loaderSha256": "",
+  "changelog": "cookie-backed persistence (Discord renderer has no localStorage), Reload client button, settings/module toggles persist"
 }
